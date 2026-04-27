@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+/* =========================
+   BASE RESET / LAYOUT
+========================= */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* =========================
+   TYPOGRAPHY FOUNDATION
+========================= */
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+
+  /* consistent base color system */
+  color: #000;
+  background: #fff;
+}
+
+/* headings feel tighter & more premium */
+h1, h2, h3 {
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+/* =========================
+   INTERACTIVE ELEMENT RESET
+========================= */
+button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* =========================
+   DESIGN SYSTEM VARIABLES
+   (this is your consistency engine)
+========================= */
+:root {
+  --color-primary: #f9f871;   /* lemon */
+  --color-text: #000000;
+  --color-muted: rgba(0,0,0,0.6);
+  --color-border: rgba(0,0,0,0.1);
+  --color-hover: rgba(0,0,0,0.06);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-full: 999px;
+}
+
+/* =========================
+   GLOBAL UI HELPERS
+========================= */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* subtle hover utility (optional use) */
+.hover-soft {
+  transition: all 0.2s ease;
+}
+.hover-soft:hover {
+  background: var(--color-hover);
+}
+
+/* =========================
+   ANIMATIONS (kept + improved)
+========================= */
+.animate-pulse-red {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(1.5); }
+}
+
+/* new premium shimmer utility */
+@keyframes shimmer {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 6s linear infinite;
+}
