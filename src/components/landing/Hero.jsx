@@ -126,15 +126,7 @@ export default function Hero() {
           {/* CTA */}
           <motion.div variants={item} className="mt-[20px]">
             <button
-              className="
-                bg-black text-white text-[14.5px]
-                px-[26px] py-[12px]
-                rounded-full font-medium
-                transition
-                hover:scale-[1.02]
-                active:scale-[0.98]
-                hover:bg-[#111]
-              "
+              className="px-4 py-2 text-sm font-semibold bg-[var(--color-primary)] text-black border border-[var(--color-border)] hover:opacity-90 rounded-full transition"
             >
               Claim 2% match
             </button>

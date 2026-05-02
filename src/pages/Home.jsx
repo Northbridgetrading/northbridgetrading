@@ -3,7 +3,9 @@ import Hero from '../components/landing/Hero'
 import Services from '../components/landing/Services'
 import Aboutus from '../components/landing/About'
 import Projects from "../components/landing/Projects";
+import Testimonials from "../components/landing/Testimonials"
 import Footer from '../components/layout/Footer'
+
 
 function Home() {
   return (
@@ -13,7 +15,7 @@ function Home() {
       <Aboutus />
       <Services />
       <Projects />
-      {/* <Testimonials /> */}
+      <Testimonials />
       {/* <Contacts /> */}
       <Footer />
     </div>

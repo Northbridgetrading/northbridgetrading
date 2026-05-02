@@ -15,7 +15,7 @@ export default function Projects() {
         {/* LEFT IMAGE PANEL */}
         <div className="w-full lg:w-6/12 relative h-64 sm:h-96 lg:h-[75vh] order-1 lg:order-1">
           <img
-            src="ricardo-gomez-angel-sYK-jN0sKBY-unsplash.jpg"
+            src="bruno-thethe-qyhLjwn6Gpc-unsplash.jpg"
             alt="Zettatone Innovation"
             className="w-full h-full object-cover"
           />
@@ -31,14 +31,14 @@ export default function Projects() {
               {...fadeUp}
               className="text-[2.75rem] sm:text-[3rem] md:text-[3.5rem] font-light tracking-wide uppercase leading-tight text-[#e63946]"
             >
-              WHY ZETTATONE
+              Why  NorthbridgeMrkts?
             </motion.h1>
 
             <motion.p
               {...fadeUp}
               className="mt-6 text-base sm:text-lg leading-relaxed text-[#1A0000] max-w-lg"
             >
-              At Zettatone, innovation meets impact. Work on cutting-edge engineering projects, collaborate with brilliant minds, and push the boundaries of technology. Your ideas will shape solutions that matter.
+              At NorbridgeMrkts, innovation meets impact. Work on cutting-edge engineering projects, collaborate with brilliant minds, and push the boundaries of technology. Your ideas will shape solutions that matter.
             </motion.p>
 
             <motion.div
@@ -49,7 +49,7 @@ export default function Projects() {
                 className="px-6 py-2 border border-[#7d1f1f] text-[#7d1f1f] font-light tracking-wide uppercase rounded-sm transition hover:bg-[#7d1f1f] hover:text-white"
                 aria-label="See Projects"
               >
-                See Projects
+                Come aboard
               </button>
             </motion.div>
 
@@ -57,39 +57,9 @@ export default function Projects() {
         </div>
       </div>
 
-      {/* TESTIMONIALS / SOCIAL PROOF SECTION */}
-<div className="max-w-7xl mx-auto mt-24 px-6 flex flex-col md:flex-row items-start gap-16">
-  <motion.h3
-    {...fadeUp}
-    className="md:w-1/2 text-[2.75rem] sm:text-[3rem] font-light tracking-wide uppercase leading-tight text-[#e63946]"
-  >
-    SEE WHAT PEOPLE ARE SAYING
-  </motion.h3>
-  <div className="md:w-1/2 flex flex-col">
-    <motion.p
-      {...fadeUp}
-      className="max-w-lg text-[#1A0000] text-base sm:text-lg leading-relaxed mb-6"
-    >
-      From engineers to innovators, people are talking about the impact Zettatone is making. Our teams turn bold ideas into real-world solutions that inspire, challenge, and transform.
-    </motion.p>
+      
 
-    <motion.p
-      {...fadeUp}
-      className="max-w-lg text-[#1A0000] text-base sm:text-lg leading-relaxed mb-6"
-    >
-      Hear from our collaborators, partners, and clients who have experienced firsthand the creativity, expertise, and drive that define Zettatone.
-    </motion.p>
-
-    {/* Button */}
-    <motion.button
-      {...fadeUp}
-      className="px-6 py-2 border border-[#7d1f1f] text-[#7d1f1f] font-light tracking-wide uppercase rounded-sm transition hover:bg-[#7d1f1f] hover:text-white w-max"
-      aria-label="Read Testimonials"
-    >
-      Read Testimonials
-    </motion.button>
-  </div>
-</div>
+ 
     </section>
   );
 }
