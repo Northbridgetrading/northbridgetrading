@@ -8,7 +8,7 @@ import Contact from "./pages/Contact";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import SignIn from "./pages/SignIn";
-import SignUp from "./pages/SignUpTemp";
+import SignUp from "./pages/SignUp";
 import AuthCallback from './pages/AuthCallback'
 
 import AppLayout from "./Layout/AppLayout";
