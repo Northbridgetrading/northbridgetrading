@@ -77,7 +77,7 @@ export default function Hero() {
           <motion.h1
             variants={item}
             className="
-              text-[clamp(72px,9vw,120px)]
+              text-[clamp(36px,9vw,120px)]
               leading-[1.0]
               tracking-[-2px]
               text-white
