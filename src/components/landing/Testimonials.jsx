@@ -25,7 +25,7 @@ export default function Protection() {
         className="max-w-6xl mx-auto text-center opacity-0 translate-y-12 transition-all duration-1000 ease-out"
       >
         <h2 className="text-4xl md:text-5xl font-medium tracking-tighter mb-20 md:mb-24">
-          Robinhood Protection Guarantee
+          Northbridge Protection Guarantee
         </h2>
 
         {/* First Row - Two big icons (exactly like your image) */}

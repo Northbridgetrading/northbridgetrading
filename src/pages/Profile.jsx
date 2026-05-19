@@ -1,106 +1,81 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import axios from "axios";
 import {
-  LayoutDashboard, Briefcase, TrendingUp, Search,
-  Settings, LogOut, User, BarChart2, PieChart, LineChart,
-  Edit3, Users, Copy, TrendingDown, Award, Clock
+  User, Mail, Lock, ArrowUpRight, ArrowDownRight,
+  ChevronRight, LogOut, ArrowLeft, Eye, EyeOff,
+  TrendingUp, DollarSign, BarChart2, Shield
 } from "lucide-react";
 
-const COINS = [
-  { id: "bitcoin",     symbol: "BTC",  label: "Bitcoin"  },
-  { id: "ethereum",    symbol: "ETH",  label: "Ethereum" },
-  { id: "solana",      symbol: "SOL",  label: "Solana"   },
-  { id: "binancecoin", symbol: "BNB",  label: "BNB"      },
-  { id: "dogecoin",    symbol: "DOGE", label: "Dogecoin" },
-];
-
-const STARTING_BALANCE = 10000;
+const fmt    = (n, d = 2) => n?.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }) ?? "—";
+const fmtUSD = (n) => `$${fmt(n)}`;
 
 export default function Profile({ session }) {
-  const navigate = useNavigate();
-  const user = session.user;
-  const userName = user.user_metadata?.full_name || "Anonymous";
-  const userEmail = user.email;
-  const userCountry = user.user_metadata?.country || "Unknown";
+  const navigate  = useNavigate();
+  const user      = session.user;
+  const userId    = user.id;
 
-  const [activeTab, setActiveTab] = useState("Overview");
-  const [balance, setBalance] = useState(STARTING_BALANCE);
-  const [portfolio, setPortfolio] = useState({});
-  const [prices, setPrices] = useState({});
-  const [bio, setBio] = useState("");
-  const [editingBio, setEditingBio] = useState(false);
-  const [bioInput, setBioInput] = useState("");
-  const [joinDate, setJoinDate] = useState("");
-  const [historyData, setHistoryData] = useState([]);
+  const [profile,       setProfile]       = useState(null);
+  const [trades,        setTrades]        = useState([]);
+  const [positions,     setPositions]     = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [activeSection, setActiveSection] = useState("profile");
+  const [saving,        setSaving]        = useState(false);
+  const [notification,  setNotification]  = useState(null);
+
+  // Edit profile state
+  const [fullName,  setFullName]  = useState("");
+  const [editName,  setEditName]  = useState(false);
+
+  // Password state
+  const [currentPw,  setCurrentPw]  = useState("");
+  const [newPw,      setNewPw]      = useState("");
+  const [confirmPw,  setConfirmPw]  = useState("");
+  const [showPw,     setShowPw]     = useState(false);
+  const [pwLoading,  setPwLoading]  = useState(false);
 
   useEffect(() => {
     const load = async () => {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("balance, bio")
-        .eq("id", user.id)
-        .single();
-
-      if (profile) {
-        setBalance(profile.balance ?? STARTING_BALANCE);
-        setBio(profile.bio || "");
-        setBioInput(profile.bio || "");
-      }
-
-      const { data: holdings } = await supabase
-        .from("portfolio")
-        .select("*")
-        .eq("user_id", user.id);
-
-      if (holdings) {
-        const mapped = {};
-        holdings.forEach((h) => {
-          mapped[h.coin_id] = { qty: h.qty, avgPrice: h.avg_price, symbol: h.symbol, label: h.label };
-        });
-        setPortfolio(mapped);
-      }
-
-      setJoinDate(new Date(user.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" }));
+      const [
+        { data: prof },
+        { data: tr },
+        { data: pos }
+      ] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", userId).single(),
+        supabase.from("trades").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
+        supabase.from("positions").select("*").eq("user_id", userId),
+      ]);
+      if (prof) { setProfile(prof); setFullName(prof.full_name || ""); }
+      if (tr)   setTrades(tr);
+      if (pos)  setPositions(pos);
+      setLoading(false);
     };
     load();
-  }, []);
+  }, [userId]);
 
-  useEffect(() => {
-    const fetchPrices = async () => {
-      try {
-        const res = await axios.get(
-          "https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC,ETH,SOL,BNB,DOGE&tsyms=USD"
-        );
-        const raw = res.data.RAW;
-        const fmt = {};
-        COINS.forEach((c) => {
-          const d = raw[c.symbol]?.USD;
-          if (d) fmt[c.id] = { usd: d.PRICE, change: d.CHANGEPCT24HOUR };
-        });
-        setPrices(fmt);
-      } catch (e) {}
-    };
-    fetchPrices();
-  }, []);
+  const notify = (msg, type = "success") => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 3500);
+  };
 
-  useEffect(() => {
-    const fetchHistory = async () => {
-      try {
-        const res = await axios.get(
-          "https://min-api.cryptocompare.com/data/v2/histoday?fsym=BTC&tsym=USD&limit=30"
-        );
-        setHistoryData(res.data.Data.Data);
-      } catch (e) {}
-    };
-    fetchHistory();
-  }, []);
+  const handleSaveName = async () => {
+    setSaving(true);
+    await supabase.from("profiles").update({ full_name: fullName }).eq("id", userId);
+    setProfile(prev => ({ ...prev, full_name: fullName }));
+    setEditName(false);
+    setSaving(false);
+    notify("Name updated successfully");
+  };
 
-  const saveBio = async () => {
-    await supabase.from("profiles").update({ bio: bioInput }).eq("id", user.id);
-    setBio(bioInput);
-    setEditingBio(false);
+  const handleChangePassword = async () => {
+    if (!newPw || newPw.length < 6) return notify("Password must be at least 6 characters", "error");
+    if (newPw !== confirmPw) return notify("Passwords don't match", "error");
+    setPwLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: newPw });
+    setPwLoading(false);
+    if (error) return notify(error.message, "error");
+    setCurrentPw(""); setNewPw(""); setConfirmPw("");
+    notify("Password changed successfully");
   };
 
   const handleLogout = async () => {
@@ -108,345 +83,478 @@ export default function Profile({ session }) {
     navigate("/signin");
   };
 
-  const portfolioValue = Object.entries(portfolio).reduce((acc, [id, h]) => {
-    if (!h) return acc;
-    return acc + (prices[id]?.usd || 0) * h.qty;
-  }, 0);
-  const totalValue = balance + portfolioValue;
-  const pnl = totalValue - STARTING_BALANCE;
-  const pnlPct = ((pnl / STARTING_BALANCE) * 100).toFixed(2);
-  const holdingsCount = Object.values(portfolio).filter(Boolean).length;
+  // Stats
+  const totalTrades    = trades.length;
+  const buyTrades      = trades.filter(t => t.trade_type === "buy");
+  const sellTrades     = trades.filter(t => t.trade_type === "sell");
+  const totalInvested  = buyTrades.reduce((a, t) => a + t.total, 0);
+  const totalReturned  = sellTrades.reduce((a, t) => a + t.total, 0);
+  const buyingPower    = profile?.buying_power ?? 0;
+  const totalDeposited = profile?.total_deposited ?? 10000;
+  const portfolioValue = positions.reduce((a, p) => a + (p.quantity * (p.avg_buy_price || 0)), 0);
+  const totalValue     = buyingPower + portfolioValue;
+  const pnl            = totalValue - totalDeposited;
+  const pnlPct         = totalDeposited > 0 ? (pnl / totalDeposited) * 100 : 0;
+  const userName       = profile?.full_name || user.email?.split("@")[0] || "Investor";
+  const initials       = userName.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 
-  const bestPerformer = Object.entries(portfolio)
-    .filter(([, h]) => h)
-    .map(([id, h]) => {
-      const currentVal = (prices[id]?.usd || 0) * h.qty;
-      const costBasis = h.avgPrice * h.qty;
-      const gain = currentVal - costBasis;
-      return { ...h, id, gain, gainPct: costBasis > 0 ? (gain / costBasis) * 100 : 0 };
-    })
-    .sort((a, b) => b.gainPct - a.gainPct)[0];
+  const sections = [
+    { id: "profile",  label: "Profile",  icon: User },
+    { id: "stats",    label: "Stats",    icon: BarChart2 },
+    { id: "security", label: "Security", icon: Shield },
+  ];
 
-  const tabs = ["Overview", "Stats", "Portfolio", "Chart"];
-
-  const Sparkline = ({ data, color = "#22c55e" }) => {
-    if (!data || data.length < 2) return null;
-    const vals = data.map((d) => d.close);
-    const min = Math.min(...vals);
-    const max = Math.max(...vals);
-    const w = 200, h = 50;
-    const points = vals.map((v, i) => {
-      const x = (i / (vals.length - 1)) * w;
-      const y = h - ((v - min) / (max - min || 1)) * h;
-      return `${x},${y}`;
-    }).join(" ");
-    return (
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "60px" }}>
-        <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
-      </svg>
-    );
-  };
+  if (loading) return (
+    <div style={{
+      minHeight: "100vh", display: "flex",
+      alignItems: "center", justifyContent: "center", background: "#fff"
+    }}>
+      <div style={{
+        width: 28, height: 28, border: "2.5px solid #f0f0f0",
+        borderTopColor: "#111", borderRadius: "50%",
+        animation: "spin 0.7s linear infinite"
+      }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); }}`}</style>
+    </div>
+  );
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#f1f5f9", fontFamily: "'Segoe UI', sans-serif" }}>
+    <div style={{
+      minHeight: "100vh", background: "#fff",
+      fontFamily: "'Geist Variable', ui-sans-serif, system-ui, sans-serif",
+      color: "#111", WebkitFontSmoothing: "antialiased"
+    }}>
 
-      {/* SIDEBAR */}
-      <aside style={{
-        width: "64px", background: "#1a1a2e", display: "flex", flexDirection: "column",
-        alignItems: "center", paddingTop: "20px", gap: "8px", position: "fixed",
-        top: 0, left: 0, height: "100vh", zIndex: 100
+      {/* ── TOP BAR ── */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 10,
+        background: "#fff", borderBottom: "1px solid #f0f0f0",
+        padding: "14px 24px",
+        display: "flex", alignItems: "center", justifyContent: "space-between"
       }}>
-        <div style={{
-          width: "36px", height: "36px", background: "linear-gradient(135deg, #22c55e, #16a34a)",
-          borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center",
-          color: "white", fontWeight: "800", fontSize: "16px", marginBottom: "16px"
-        }}>N</div>
+        <button
+          onClick={() => navigate("/dashboard")}
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            background: "none", border: "none", cursor: "pointer",
+            fontSize: 14, fontWeight: 500, color: "#111"
+          }}
+        >
+          <ArrowLeft size={18} /> Back
+        </button>
+        <p style={{ fontSize: 15, fontWeight: 600 }}>Account</p>
+        <button
+          onClick={handleLogout}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: "none", border: "none", cursor: "pointer",
+            fontSize: 13, color: "#ef4444", fontWeight: 500
+          }}
+        >
+          <LogOut size={15} /> Logout
+        </button>
+      </div>
 
-        {[
-          { icon: <LayoutDashboard size={20} />, label: "Dashboard" },
-          { icon: <Briefcase size={20} />,       label: "Portfolio"  },
-          { icon: <TrendingUp size={20} />,      label: "Markets"    },
-          { icon: <Search size={20} />,          label: "Discover"   },
-          { icon: <Settings size={20} />,        label: "Settings"   },
-        ].map((item) => (
-          <div
-            key={item.label}
-            onClick={() => navigate("/Dashboard")}
-            title={item.label}
-            style={{
-              width: "44px", height: "44px", borderRadius: "12px", display: "flex",
-              alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#94a3b8",
-            }}
-          >
-            {item.icon}
-          </div>
-        ))}
+      <div style={{ maxWidth: 680, margin: "0 auto", padding: "0 20px 60px" }}>
 
+        {/* ── AVATAR + NAME ── */}
         <div style={{
-          width: "44px", height: "44px", borderRadius: "12px", display: "flex",
-          alignItems: "center", justifyContent: "center", color: "#22c55e",
-          background: "rgba(34,197,94,0.15)",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", padding: "32px 0 24px",
+          borderBottom: "1px solid #f5f5f5", marginBottom: 24
         }}>
-          <User size={20} />
-        </div>
-
-        <div style={{ marginTop: "auto", marginBottom: "20px" }}>
-          <div onClick={handleLogout} title="Logout" style={{
-            width: "44px", height: "44px", borderRadius: "12px", display: "flex",
-            alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#ef4444",
+          <div style={{
+            width: 72, height: 72, borderRadius: "50%",
+            background: "#111", display: "flex",
+            alignItems: "center", justifyContent: "center",
+            fontSize: 24, fontWeight: 700, color: "#fff",
+            marginBottom: 14
           }}>
-            <LogOut size={20} />
+            {initials}
           </div>
-        </div>
-      </aside>
-
-      {/* MAIN CONTENT */}
-      <div style={{ marginLeft: "64px", flex: 1, display: "flex", flexDirection: "column" }}>
-
-        {/* PROFILE HEADER */}
-        <div style={{ background: "white", borderBottom: "1px solid #e2e8f0", padding: "24px 32px 0" }}>
-          <p style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "16px" }}>
-            People › {userCountry} › {userName.toLowerCase().replace(" ", "")}
+          <p style={{ fontSize: 20, fontWeight: 600, color: "#111", marginBottom: 4 }}>
+            {userName}
           </p>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "20px", marginBottom: "24px" }}>
-            <div style={{
-              width: "72px", height: "72px", borderRadius: "16px",
-              background: "linear-gradient(135deg, #1e293b, #334155)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: "28px", fontWeight: "800", color: "#22c55e",
-              border: "3px solid #e2e8f0", flexShrink: 0
-            }}>
-              {userName.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <h1 style={{ fontSize: "22px", fontWeight: "700", color: "#1a1a2e", margin: 0 }}>{userName}</h1>
-              <p style={{ fontSize: "13px", color: "#94a3b8", margin: "4px 0 0" }}>
-                {userCountry} · Joined {joinDate}
-              </p>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", borderTop: "1px solid #f1f5f9" }}>
-            {tabs.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                style={{
-                  padding: "12px 24px", background: "none", border: "none", cursor: "pointer",
-                  fontSize: "14px", fontWeight: activeTab === tab ? "600" : "400",
-                  color: activeTab === tab ? "#1a1a2e" : "#94a3b8",
-                  borderBottom: activeTab === tab ? "2px solid #22c55e" : "2px solid transparent",
-                  transition: "all 0.2s", display: "flex", alignItems: "center", gap: "6px"
-                }}
-              >
-                {tab === "Overview"  && <BarChart2 size={14} />}
-                {tab === "Stats"     && <TrendingUp size={14} />}
-                {tab === "Portfolio" && <PieChart size={14} />}
-                {tab === "Chart"     && <LineChart size={14} />}
-                {tab}
-              </button>
-            ))}
+          <p style={{ fontSize: 13, color: "#aaa" }}>{user.email}</p>
+          <div style={{
+            marginTop: 12, padding: "4px 12px",
+            background: "#f0fdf4", borderRadius: 100,
+            fontSize: 12, fontWeight: 600, color: "#16a34a"
+          }}>
+            Active Account
           </div>
         </div>
 
-        {/* TAB CONTENT */}
-        <div style={{ padding: "28px 32px", flex: 1 }}>
+        {/* ── SECTION TABS ── */}
+        <div style={{
+          display: "flex", gap: 4,
+          background: "#f5f5f5", borderRadius: 12,
+          padding: 4, marginBottom: 28
+        }}>
+          {sections.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveSection(id)}
+              style={{
+                flex: 1, padding: "9px 8px", borderRadius: 10, border: "none",
+                background: activeSection === id ? "#fff" : "transparent",
+                color: activeSection === id ? "#111" : "#888",
+                fontSize: 13, fontWeight: 600, cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                gap: 6, transition: "all 0.15s",
+                boxShadow: activeSection === id ? "0 1px 4px rgba(0,0,0,0.08)" : "none"
+              }}
+            >
+              <Icon size={14} /> {label}
+            </button>
+          ))}
+        </div>
 
-          {/* OVERVIEW */}
-          {activeTab === "Overview" && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: "24px" }}>
-              <div style={{ background: "white", borderRadius: "16px", padding: "24px", border: "1px solid #e2e8f0" }}>
-                <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#1a1a2e", margin: "0 0 20px" }}>Performance</h3>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "24px" }}>
-                  {[
-                    { label: "Total Value", value: `$${totalValue.toFixed(2)}`,                        color: "#1a1a2e" },
-                    { label: "P&L",         value: `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}`,         color: pnl >= 0 ? "#22c55e" : "#ef4444" },
-                    { label: "Return",      value: `${pnlPct}%`,                                        color: pnl >= 0 ? "#22c55e" : "#ef4444" },
-                  ].map((s) => (
-                    <div key={s.label} style={{ textAlign: "center", padding: "16px", background: "#f8fafc", borderRadius: "12px" }}>
-                      <p style={{ fontSize: "12px", color: "#94a3b8", margin: "0 0 6px" }}>{s.label}</p>
-                      <p style={{ fontSize: "20px", fontWeight: "800", color: s.color, margin: 0 }}>{s.value}</p>
-                    </div>
-                  ))}
-                </div>
-                {historyData.length > 0 ? (
-                  <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "16px" }}>
-                    <p style={{ fontSize: "12px", color: "#94a3b8", margin: "0 0 8px" }}>BTC 30-day trend</p>
-                    <Sparkline data={historyData} color={pnl >= 0 ? "#22c55e" : "#ef4444"} />
+        {/* ── NOTIFICATION ── */}
+        {notification && (
+          <div style={{
+            padding: "12px 16px", borderRadius: 12, marginBottom: 20,
+            fontSize: 13, fontWeight: 500,
+            background: notification.type === "success" ? "#f0fdf4" : "#fef2f2",
+            color: notification.type === "success" ? "#16a34a" : "#dc2626",
+            border: `1px solid ${notification.type === "success" ? "#bbf7d0" : "#fecaca"}`
+          }}>
+            {notification.type === "success" ? "✓" : "⚠"} {notification.msg}
+          </div>
+        )}
+
+        {/* ══ PROFILE SECTION ══ */}
+        {activeSection === "profile" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+            {/* Name */}
+            <div style={{
+              border: "1px solid #f0f0f0", borderRadius: 16, padding: 20
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: editName ? 16 : 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 10,
+                    background: "#f5f5f5", display: "flex",
+                    alignItems: "center", justifyContent: "center", color: "#666"
+                  }}><User size={16} /></div>
+                  <div>
+                    <p style={{ fontSize: 11, color: "#aaa", marginBottom: 2 }}>Full Name</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>
+                      {profile?.full_name || "Not set"}
+                    </p>
                   </div>
-                ) : (
-                  <div style={{ textAlign: "center", padding: "40px", color: "#cbd5e1", fontSize: "14px" }}>No Data to Display</div>
-                )}
+                </div>
+                <button
+                  onClick={() => setEditName(!editName)}
+                  style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    fontSize: 13, color: "#1E4A7C", fontWeight: 500
+                  }}
+                >
+                  {editName ? "Cancel" : "Edit"}
+                </button>
               </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                <div style={{ background: "white", borderRadius: "16px", padding: "24px", border: "1px solid #e2e8f0" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                    <h3 style={{ fontSize: "15px", fontWeight: "700", color: "#1a1a2e", margin: 0 }}>About {userName.split(" ")[0]}</h3>
-                    <button onClick={() => setEditingBio(true)} style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "4px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", color: "#64748b" }}>
-                      <Edit3 size={12} /> Edit
-                    </button>
-                  </div>
-                  {editingBio ? (
-                    <div>
-                      <textarea value={bioInput} onChange={(e) => setBioInput(e.target.value)} placeholder="Tell investors about your strategy..." style={{ width: "100%", minHeight: "80px", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "13px", color: "#1a1a2e", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit" }} />
-                      <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-                        <button onClick={saveBio} style={{ flex: 1, padding: "8px", background: "#22c55e", color: "white", border: "none", borderRadius: "8px", fontWeight: "600", cursor: "pointer", fontSize: "13px" }}>Save</button>
-                        <button onClick={() => setEditingBio(false)} style={{ flex: 1, padding: "8px", background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: "8px", fontWeight: "600", cursor: "pointer", fontSize: "13px" }}>Cancel</button>
-                      </div>
-                    </div>
-                  ) : bio ? (
-                    <p style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6", margin: 0 }}>{bio}</p>
-                  ) : (
-                    <div style={{ textAlign: "center", padding: "16px 0" }}>
-                      <p style={{ fontSize: "13px", color: "#94a3b8", margin: "0 0 12px" }}>Give investors more details about your history, investment approach, and your style</p>
-                      <button onClick={() => setEditingBio(true)} style={{ padding: "8px 20px", background: "none", border: "2px solid #22c55e", color: "#22c55e", borderRadius: "999px", fontWeight: "600", cursor: "pointer", fontSize: "13px" }}>Write Bio</button>
-                    </div>
-                  )}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "20px", paddingTop: "20px", borderTop: "1px solid #f1f5f9" }}>
-                    {[
-                      { icon: <Copy size={16} />,  label: "Copiers",   value: "N/A" },
-                      { icon: <Users size={16} />, label: "Followers", value: "0"   },
-                    ].map((s) => (
-                      <div key={s.label} style={{ textAlign: "center" }}>
-                        <p style={{ fontSize: "22px", fontWeight: "800", color: "#1a1a2e", margin: "0 0 4px" }}>{s.value}</p>
-                        <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>{s.icon}{s.label}</p>
-                      </div>
-                    ))}
-                  </div>
+              {editName && (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    value={fullName}
+                    onChange={e => setFullName(e.target.value)}
+                    placeholder="Enter your full name"
+                    style={{
+                      flex: 1, padding: "10px 14px", borderRadius: 10,
+                      border: "1px solid #f0f0f0", background: "#f8f9fa",
+                      fontSize: 14, color: "#111", outline: "none",
+                      fontFamily: "inherit"
+                    }}
+                  />
+                  <button
+                    onClick={handleSaveName}
+                    disabled={saving}
+                    style={{
+                      padding: "10px 20px", borderRadius: 10, border: "none",
+                      background: "#111", color: "#fff",
+                      fontSize: 13, fontWeight: 600, cursor: "pointer"
+                    }}
+                  >
+                    {saving ? "Saving..." : "Save"}
+                  </button>
                 </div>
+              )}
+            </div>
 
-                <div style={{ background: "white", borderRadius: "16px", padding: "20px", border: "1px solid #e2e8f0" }}>
-                  <h3 style={{ fontSize: "14px", fontWeight: "700", color: "#1a1a2e", margin: "0 0 14px", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <Award size={16} color="#f59e0b" /> Best Performer
-                  </h3>
-                  {bestPerformer ? (
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <p style={{ fontWeight: "700", fontSize: "15px", color: "#1a1a2e", margin: 0 }}>{bestPerformer.symbol}</p>
-                        <p style={{ fontSize: "12px", color: "#94a3b8", margin: "2px 0 0" }}>{bestPerformer.label}</p>
-                      </div>
-                      <span style={{ fontSize: "15px", fontWeight: "700", color: bestPerformer.gainPct >= 0 ? "#22c55e" : "#ef4444" }}>
-                        {bestPerformer.gainPct >= 0 ? "+" : ""}{bestPerformer.gainPct.toFixed(2)}%
-                      </span>
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", margin: "8px 0" }}>No holdings yet</p>
-                  )}
-                </div>
+            {/* Email */}
+            <div style={{
+              border: "1px solid #f0f0f0", borderRadius: 16, padding: 20,
+              display: "flex", alignItems: "center", gap: 10
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: "#f5f5f5", display: "flex",
+                alignItems: "center", justifyContent: "center", color: "#666"
+              }}><Mail size={16} /></div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 11, color: "#aaa", marginBottom: 2 }}>Email Address</p>
+                <p style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>{user.email}</p>
+              </div>
+              <span style={{
+                fontSize: 11, fontWeight: 600, color: "#16a34a",
+                background: "#f0fdf4", padding: "3px 10px", borderRadius: 100
+              }}>Verified</span>
+            </div>
+
+            {/* Account created */}
+            <div style={{
+              border: "1px solid #f0f0f0", borderRadius: 16, padding: 20,
+              display: "flex", alignItems: "center", gap: 10
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: "#f5f5f5", display: "flex",
+                alignItems: "center", justifyContent: "center", color: "#666"
+              }}><TrendingUp size={16} /></div>
+              <div>
+                <p style={{ fontSize: 11, color: "#aaa", marginBottom: 2 }}>Member Since</p>
+                <p style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>
+                  {new Date(user.created_at).toLocaleDateString("en-US", {
+                    year: "numeric", month: "long", day: "numeric"
+                  })}
+                </p>
               </div>
             </div>
-          )}
 
-          {/* STATS */}
-          {activeTab === "Stats" && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+            {/* Buying power */}
+            <div style={{
+              border: "1px solid #f0f0f0", borderRadius: 16, padding: 20,
+              display: "flex", alignItems: "center", gap: 10
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: "#f5f5f5", display: "flex",
+                alignItems: "center", justifyContent: "center", color: "#666"
+              }}><DollarSign size={16} /></div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 11, color: "#aaa", marginBottom: 2 }}>Buying Power</p>
+                <p style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>{fmtUSD(buyingPower)}</p>
+              </div>
+              <ChevronRight size={16} color="#ccc" />
+            </div>
+
+          </div>
+        )}
+
+        {/* ══ STATS SECTION ══ */}
+        {activeSection === "stats" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+            {/* Total value */}
+            <div style={{
+              background: "#f8f9fa", borderRadius: 16, padding: 20
+            }}>
+              <p style={{ fontSize: 12, color: "#aaa", marginBottom: 6 }}>Total Portfolio Value</p>
+              <p style={{ fontSize: 32, fontWeight: 600, color: "#111", letterSpacing: "-0.5px", marginBottom: 6 }}>
+                {fmtUSD(totalValue)}
+              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {pnl >= 0
+                  ? <ArrowUpRight size={14} color="#22c55e" />
+                  : <ArrowDownRight size={14} color="#ef4444" />
+                }
+                <span style={{ fontSize: 13, fontWeight: 500, color: pnl >= 0 ? "#22c55e" : "#ef4444" }}>
+                  {pnl >= 0 ? "+" : ""}{fmtUSD(Math.abs(pnl))} ({pnl >= 0 ? "+" : ""}{fmt(pnlPct)}%) All time
+                </span>
+              </div>
+            </div>
+
+            {/* Stats grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {[
-                { label: "Starting Balance", value: `$${STARTING_BALANCE.toLocaleString()}`,              icon: <Clock size={20} color="#94a3b8" /> },
-                { label: "Current Balance",  value: `$${balance.toFixed(2)}`,                             icon: <TrendingUp size={20} color="#22c55e" /> },
-                { label: "Portfolio Value",  value: `$${portfolioValue.toFixed(2)}`,                      icon: <PieChart size={20} color="#3b82f6" /> },
-                { label: "Total P&L",        value: `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}`,           icon: pnl >= 0 ? <TrendingUp size={20} color="#22c55e" /> : <TrendingDown size={20} color="#ef4444" /> },
-                { label: "Return %",         value: `${pnlPct}%`,                                         icon: <BarChart2 size={20} color="#f59e0b" /> },
-                { label: "Assets Held",      value: holdingsCount,                                        icon: <Briefcase size={20} color="#8b5cf6" /> },
-              ].map((s) => (
-                <div key={s.label} style={{ background: "white", borderRadius: "16px", padding: "24px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <p style={{ fontSize: "13px", color: "#94a3b8", margin: "0 0 6px" }}>{s.label}</p>
-                    <p style={{ fontSize: "24px", fontWeight: "800", color: "#1a1a2e", margin: 0 }}>{s.value}</p>
-                  </div>
-                  <div style={{ width: 44, height: 44, borderRadius: "12px", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {s.icon}
-                  </div>
+                { label: "Total Deposited",  value: fmtUSD(totalDeposited),  color: "#111" },
+                { label: "Buying Power",     value: fmtUSD(buyingPower),     color: "#111" },
+                { label: "Total Invested",   value: fmtUSD(totalInvested),   color: "#111" },
+                { label: "Total Returned",   value: fmtUSD(totalReturned),   color: "#22c55e" },
+                { label: "Total Trades",     value: totalTrades,              color: "#111" },
+                { label: "Open Positions",   value: positions.length,         color: "#111" },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{
+                  border: "1px solid #f0f0f0", borderRadius: 14,
+                  padding: "14px 16px"
+                }}>
+                  <p style={{ fontSize: 11, color: "#aaa", marginBottom: 6 }}>{label}</p>
+                  <p style={{ fontSize: 18, fontWeight: 600, color }}>{value}</p>
                 </div>
               ))}
             </div>
-          )}
 
-          {/* PORTFOLIO */}
-          {activeTab === "Portfolio" && (
-            <div style={{ background: "white", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
-              <div style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9" }}>
-                <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#1a1a2e", margin: 0 }}>My Holdings</h3>
-              </div>
-              {Object.entries(portfolio).filter(([, h]) => h).length === 0 ? (
-                <div style={{ textAlign: "center", padding: "60px 20px", color: "#94a3b8" }}>
-                  <p style={{ fontSize: "14px", margin: 0 }}>No holdings yet — start trading on the Dashboard</p>
-                </div>
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ background: "#f8fafc" }}>
-                      {["Asset", "Quantity", "Avg Buy Price", "Current Price", "Value", "P&L"].map((h) => (
-                        <th key={h} style={{ padding: "12px 24px", textAlign: "left", fontSize: "12px", fontWeight: "600", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(portfolio).filter(([, h]) => h).map(([id, h], i) => {
-                      const currentPrice = prices[id]?.usd || 0;
-                      const value = currentPrice * h.qty;
-                      const costBasis = h.avgPrice * h.qty;
-                      const gain = value - costBasis;
-                      const gainPct = costBasis > 0 ? (gain / costBasis) * 100 : 0;
-                      return (
-                        <tr key={id} style={{ borderTop: "1px solid #f1f5f9", background: i % 2 === 0 ? "white" : "#fafafa" }}>
-                          <td style={{ padding: "16px 24px" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                              <div style={{ width: 36, height: 36, borderRadius: "10px", background: "linear-gradient(135deg, #1e293b, #334155)", display: "flex", alignItems: "center", justifyContent: "center", color: "#22c55e", fontWeight: "800", fontSize: "11px" }}>{h.symbol}</div>
-                              <div>
-                                <p style={{ fontWeight: "600", fontSize: "14px", color: "#1a1a2e", margin: 0 }}>{h.symbol}</p>
-                                <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>{h.label}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td style={{ padding: "16px 24px", fontSize: "14px", color: "#1a1a2e" }}>{h.qty.toFixed(6)}</td>
-                          <td style={{ padding: "16px 24px", fontSize: "14px", color: "#64748b" }}>${h.avgPrice.toLocaleString()}</td>
-                          <td style={{ padding: "16px 24px", fontSize: "14px", color: "#1a1a2e" }}>${currentPrice.toLocaleString()}</td>
-                          <td style={{ padding: "16px 24px", fontSize: "14px", fontWeight: "600", color: "#1a1a2e" }}>${value.toFixed(2)}</td>
-                          <td style={{ padding: "16px 24px" }}>
-                            <span style={{ fontSize: "13px", fontWeight: "700", color: gain >= 0 ? "#22c55e" : "#ef4444" }}>
-                              {gain >= 0 ? "+" : ""}${gain.toFixed(2)} ({gainPct.toFixed(2)}%)
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
-
-          {/* CHART */}
-          {activeTab === "Chart" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-              {COINS.map((coin) => {
-                const p = prices[coin.id];
-                const change = p?.change;
-                return (
-                  <div key={coin.id} style={{ background: "white", borderRadius: "16px", padding: "20px 24px", border: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                      <div style={{ width: 44, height: 44, borderRadius: "12px", background: "linear-gradient(135deg, #1e293b, #334155)", display: "flex", alignItems: "center", justifyContent: "center", color: "#22c55e", fontWeight: "800", fontSize: "12px" }}>{coin.symbol}</div>
-                      <div>
-                        <p style={{ fontWeight: "700", fontSize: "15px", color: "#1a1a2e", margin: 0 }}>{coin.label}</p>
-                        <p style={{ fontSize: "12px", color: "#94a3b8", margin: "2px 0 0" }}>{coin.symbol}/USD</p>
-                      </div>
+            {/* Recent trades */}
+            {trades.length > 0 && (
+              <div>
+                <p style={{ fontSize: 15, fontWeight: 600, color: "#111", marginBottom: 14 }}>
+                  Recent Trades
+                </p>
+                {trades.slice(0, 5).map(t => (
+                  <div key={t.id} style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "12px 0", borderBottom: "1px solid #f5f5f5"
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      background: t.trade_type === "buy" ? "#f0fdf4" : "#fef2f2",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: t.trade_type === "buy" ? "#22c55e" : "#ef4444",
+                      fontSize: 10, fontWeight: 700
+                    }}>
+                      {t.trade_type === "buy" ? "BUY" : "SELL"}
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <p style={{ fontSize: "18px", fontWeight: "800", color: "#1a1a2e", margin: 0 }}>{p ? `$${p.usd.toLocaleString()}` : "..."}</p>
-                      <p style={{ fontSize: "13px", fontWeight: "600", margin: "2px 0 0", color: change >= 0 ? "#22c55e" : "#ef4444" }}>
-                        {change ? `${change >= 0 ? "▲" : "▼"} ${Math.abs(change).toFixed(2)}%` : "..."}
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>
+                        {t.trade_type === "buy" ? "Bought" : "Sold"} {t.symbol}
+                      </p>
+                      <p style={{ fontSize: 11, color: "#aaa" }}>
+                        {new Date(t.created_at).toLocaleDateString()}
                       </p>
                     </div>
+                    <p style={{
+                      fontSize: 13, fontWeight: 600,
+                      color: t.trade_type === "buy" ? "#ef4444" : "#22c55e"
+                    }}>
+                      {t.trade_type === "buy" ? "-" : "+"}{fmtUSD(t.total)}
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-        </div>
+        {/* ══ SECURITY SECTION ══ */}
+        {activeSection === "security" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+            {/* Change password */}
+            <div style={{
+              border: "1px solid #f0f0f0", borderRadius: 16, padding: 20
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10,
+                  background: "#f5f5f5", display: "flex",
+                  alignItems: "center", justifyContent: "center", color: "#666"
+                }}><Lock size={16} /></div>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>Change Password</p>
+                  <p style={{ fontSize: 12, color: "#aaa" }}>Update your account password</p>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {[
+                  { label: "New Password",     value: newPw,      setter: setNewPw },
+                  { label: "Confirm Password", value: confirmPw,  setter: setConfirmPw },
+                ].map(({ label, value, setter }) => (
+                  <div key={label} style={{ position: "relative" }}>
+                    <input
+                      type={showPw ? "text" : "password"}
+                      placeholder={label}
+                      value={value}
+                      onChange={e => setter(e.target.value)}
+                      style={{
+                        width: "100%", padding: "12px 44px 12px 14px",
+                        borderRadius: 10, border: "1px solid #f0f0f0",
+                        background: "#f8f9fa", fontSize: 14, color: "#111",
+                        outline: "none", fontFamily: "inherit",
+                        boxSizing: "border-box"
+                      }}
+                    />
+                    <button
+                      onClick={() => setShowPw(!showPw)}
+                      style={{
+                        position: "absolute", right: 12, top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none", border: "none",
+                        cursor: "pointer", color: "#aaa"
+                      }}
+                    >
+                      {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  onClick={handleChangePassword}
+                  disabled={pwLoading}
+                  style={{
+                    width: "100%", padding: "13px", borderRadius: 100,
+                    border: "none", background: "#111", color: "#fff",
+                    fontSize: 14, fontWeight: 600, cursor: "pointer",
+                    marginTop: 4
+                  }}
+                >
+                  {pwLoading ? "Updating..." : "Update Password"}
+                </button>
+              </div>
+            </div>
+
+            {/* Account info */}
+            <div style={{
+              border: "1px solid #f0f0f0", borderRadius: 16, padding: 20
+            }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: "#111", marginBottom: 14 }}>
+                Account Security
+              </p>
+              {[
+                { label: "Email verified",       status: true  },
+                { label: "Two-factor auth",      status: false },
+                { label: "Login notifications",  status: true  },
+              ].map(({ label, status }) => (
+                <div key={label} style={{
+                  display: "flex", justifyContent: "space-between",
+                  alignItems: "center", padding: "10px 0",
+                  borderBottom: "1px solid #f5f5f5"
+                }}>
+                  <p style={{ fontSize: 14, color: "#333" }}>{label}</p>
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, padding: "3px 10px",
+                    borderRadius: 100,
+                    color: status ? "#16a34a" : "#f59e0b",
+                    background: status ? "#f0fdf4" : "#fffbeb"
+                  }}>
+                    {status ? "Enabled" : "Disabled"}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Danger zone */}
+            <div style={{
+              border: "1px solid #fecaca", borderRadius: 16,
+              padding: 20, background: "#fff"
+            }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: "#ef4444", marginBottom: 14 }}>
+                Danger Zone
+              </p>
+              <button
+                onClick={handleLogout}
+                style={{
+                  width: "100%", padding: "12px", borderRadius: 100,
+                  border: "1px solid #fecaca", background: "#fff",
+                  color: "#ef4444", fontSize: 14, fontWeight: 600, cursor: "pointer"
+                }}
+              >
+                Sign Out of All Devices
+              </button>
+            </div>
+
+          </div>
+        )}
+
       </div>
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        input::placeholder { color: #bbb; }
+      `}</style>
     </div>
   );
 }

@@ -1,482 +1,657 @@
-import { useEffect, useState, useCallback } from "react";
+// src/pages/Dashboard.jsx
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import "../styles/Dashboard.css";
-import Chart from "../components/Charts";
-import axios from "axios";
-import {
-  LayoutDashboard, Briefcase, TrendingUp, Search,
-  Settings, Bell, LogOut, User
-} from "lucide-react";
 
-const COINS = [
-  { id: "bitcoin",      symbol: "BTC",  label: "Bitcoin"  },
-  { id: "ethereum",     symbol: "ETH",  label: "Ethereum" },
-  { id: "solana",       symbol: "SOL",  label: "Solana"   },
-  { id: "binancecoin",  symbol: "BNB",  label: "BNB"      },
-  { id: "dogecoin",     symbol: "DOGE", label: "Dogecoin" },
-];
+// Utils
+import { COINS, STARTING_BALANCE } from "../Utils/constants";
+import { fmtUSD, fmt } from "../Utils/formatters";
 
-const STARTING_BALANCE = 10000;
+// Hooks
+import { useIsMobile } from "../hooks/useIsMobile";
+import { usePrices } from "../hooks/usePrices";
+import { useSparklines } from "../hooks/useSparklines";
+import { useChartData } from "../hooks/useChartData";
 
-function Dashboard({ session }) {
+// Components
+import { DesktopLayout } from "../components/layout/DesktopLayout";
+import { MobileLayout } from "../components/layout/MobileLayout";
+import { HomeFeed } from "../components/dashboard/HomeFeed";
+import { HistoryView } from "../components/dashboard/HistoryView";
+import { CoinDetail } from "../components/dashboard/CoinDetail";
+import { TradeSheet } from "../components/sheets/TradeSheet";
+import { DepositSheet } from "../components/sheets/DepositSheet";
+import { WithdrawSheet } from "../components/sheets/WithdrawSheet";
+import { SearchSheet } from "../components/sheets/SearchSheet";
+import { InvestSheet } from "../components/sheets/InvestSheet";
+import { LoadingSpinner } from "../components/common/LoadingSpinner";
+
+export default function Dashboard({ session }) {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
+  const user = session?.user;
+  const userId = user?.id;
+  const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Investor";
 
-  const user      = session.user;
-  const userId    = user.id;
-  const userEmail = user.email;
-  const userName  = user.user_metadata?.full_name || user.email;
-
+  // State
   const [dbLoaded, setDbLoaded] = useState(false);
-  const [prices, setPrices]         = useState({});
-  const [portfolio, setPortfolio]   = useState({});
-  const [balance, setBalance]       = useState(STARTING_BALANCE);
+  const [positions, setPositions] = useState([]);
+  const [watchlist, setWatchlist] = useState([]);
+  const [trades, setTrades] = useState([]);
+  const [investments, setInvestments] = useState([]);
+  const [buyingPower, setBuyingPower] = useState(STARTING_BALANCE);
+  const [totalDeposited, setTotalDeposited] = useState(STARTING_BALANCE);
   const [selectedCoin, setSelectedCoin] = useState(COINS[0]);
-  const [chartData, setChartData]   = useState([]);
-  const [tradeAmount, setTradeAmount] = useState("");
-  const [activeNav, setActiveNav]   = useState("Dashboard");
-  const [notification, setNotification] = useState("");
-  const [search, setSearch]         = useState("");
-  const [saving, setSaving]         = useState(false);
+  const [activeNav, setActiveNav] = useState("home");
+  const [activeTime, setActiveTime] = useState("1D");
+  const [hoveredVal, setHoveredVal] = useState(null);
+  const [showTradeSheet, setShowTradeSheet] = useState(false);
+  const [showCoinDetail, setShowCoinDetail] = useState(false);
+  const [showDepositSheet, setShowDepositSheet] = useState(false);
+  const [showWithdrawSheet, setShowWithdrawSheet] = useState(false);
+  const [showSearchSheet, setShowSearchSheet] = useState(false);
+  const [showInvestSheet, setShowInvestSheet] = useState(false);
+  const [tradeMode, setTradeMode] = useState("buy");
+  const [saving, setSaving] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const notifTimer = useRef(null);
 
+  // Custom hooks
+  const prices = usePrices();
+  const { sparklines } = useSparklines();
+  const { chartData } = useChartData(selectedCoin, activeTime);
+
+  // Load user data from Supabase
   useEffect(() => {
-    const loadProfile = async () => {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("balance")
-        .eq("id", user.id)
-        .single();
-
-      if (profile) setBalance(profile.balance ?? STARTING_BALANCE);
-
-      const { data: holdings } = await supabase
-        .from("portfolio")
-        .select("*")
-        .eq("user_id", user.id);
-
-      if (holdings) {
-        const mapped = {};
-        holdings.forEach((h) => {
-          mapped[h.coin_id] = {
-            qty:      h.qty,
-            avgPrice: h.avg_price,
-            symbol:   h.symbol,
-            label:    h.label,
-          };
-        });
-        setPortfolio(mapped);
-      }
-
-      setDbLoaded(true);
-    };
-
-    loadProfile();
-  }, []);
-
-  const saveToSupabase = useCallback(async (newBalance, newPortfolio) => {
-    setSaving(true);
-    try {
-      await supabase
-        .from("profiles")
-        .update({ balance: newBalance })
-        .eq("id", userId);
-
-      const upserts = [];
-      const deletes = [];
-
-      Object.entries(newPortfolio).forEach(([coinId, h]) => {
-        if (!h || h.qty <= 0) {
-          deletes.push(coinId);
-        } else {
-          upserts.push({
-            user_id:   userId,
-            coin_id:   coinId,
-            qty:       h.qty,
-            avg_price: h.avgPrice,
-            symbol:    h.symbol,
-            label:     h.label,
-          });
+    const loadUserData = async () => {
+      if (!userId) return;
+      
+      try {
+        const [
+          { data: profile },
+          { data: pos },
+          { data: wl },
+          { data: tr },
+          { data: inv }
+        ] = await Promise.all([
+          supabase.from("profiles").select("*").eq("id", userId).single(),
+          supabase.from("positions").select("*").eq("user_id", userId),
+          supabase.from("watchlist").select("*").eq("user_id", userId),
+          supabase.from("trades").select("*").eq("user_id", userId)
+            .order("created_at", { ascending: false }).limit(20),
+          supabase.from("investments").select("*").eq("user_id", userId)
+            .order("created_at", { ascending: false })
+        ]);
+        
+        if (profile) {
+          setBuyingPower(profile.buying_power ?? STARTING_BALANCE);
+          setTotalDeposited(profile.total_deposited ?? STARTING_BALANCE);
         }
-      });
-
-      if (upserts.length > 0) {
-        await supabase
-          .from("portfolio")
-          .upsert(upserts, { onConflict: "user_id,coin_id" });
-      }
-
-      for (const coinId of deletes) {
-        await supabase
-          .from("portfolio")
-          .delete()
-          .eq("user_id", userId)
-          .eq("coin_id", coinId);
-      }
-    } catch (err) {
-      console.error("Save failed", err);
-    }
-    setSaving(false);
-  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    const fetchPrices = async () => {
-      try {
-        const res = await axios.get(
-          `https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC,ETH,SOL,BNB,DOGE&tsyms=USD`
-        );
-        const raw = res.data.RAW;
-        const formatted = {};
-        COINS.forEach((coin) => {
-          const data = raw[coin.symbol]?.USD;
-          if (data) {
-            formatted[coin.id] = {
-              usd: data.PRICE,
-              usd_24h_change: data.CHANGEPCT24HOUR,
-            };
-          }
-        });
-        setPrices(formatted);
-      } catch (err) {
-        console.warn("Price fetch failed", err);
+        setPositions(pos || []);
+        setWatchlist(wl || []);
+        setTrades(tr || []);
+        setInvestments(inv || []);
+      } catch (error) {
+        console.error("Failed to load user data:", error);
+      } finally {
+        setDbLoaded(true);
       }
     };
-    fetchPrices();
-    const interval = setInterval(fetchPrices, 30000);
-    return () => clearInterval(interval);
+    
+    loadUserData();
+  }, [userId]);
+
+  // Notifications
+  const notify = useCallback((msg, type = "success") => {
+    clearTimeout(notifTimer.current);
+    setNotification({ msg, type });
+    notifTimer.current = setTimeout(() => setNotification(null), 3500);
   }, []);
 
-  useEffect(() => {
-    const fetchChart = async () => {
-      try {
-        const res = await axios.get(
-          `https://min-api.cryptocompare.com/data/v2/histoday?fsym=${selectedCoin.symbol}&tsym=USD&limit=30`
-        );
-        const formatted = res.data.Data.Data.map((d) => ({
-          time:  d.time,
-          open:  d.open,
-          high:  d.high,
-          low:   d.low,
-          close: d.close,
-        }));
-        setChartData(formatted);
-      } catch (err) {
-        console.warn("Chart fetch failed", err);
+  // Toggle Watchlist
+  const toggleWatchlist = useCallback(async (coin) => {
+    const existing = watchlist.find(w => w.symbol === coin.symbol);
+    if (existing) {
+      await supabase.from("watchlist").delete().eq("id", existing.id);
+      setWatchlist(prev => prev.filter(w => w.symbol !== coin.symbol));
+      notify(`${coin.symbol} removed from watchlist`, "success");
+    } else {
+      const { data } = await supabase.from("watchlist").insert({
+        user_id: userId,
+        symbol: coin.symbol,
+        name: coin.name,
+        asset_type: "crypto"
+      }).select().single();
+      if (data) {
+        setWatchlist(prev => [...prev, data]);
+        notify(`${coin.symbol} added to watchlist`, "success");
       }
-    };
-    fetchChart();
-  }, [selectedCoin]);
+    }
+  }, [watchlist, userId, notify]);
 
-  const notify = (msg) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(""), 3000);
-  };
-
-  const handleBuy = async () => {
-    const amount = parseFloat(tradeAmount);
-    const price  = prices[selectedCoin.id]?.usd;
-    if (!amount || !price || amount <= 0) return notify("⚠️ Enter a valid amount");
-    if (amount > balance) return notify("⚠️ Insufficient balance");
-
-    const qty        = amount / price;
-    const newBalance = balance - amount;
-    const newPortfolio = {
-      ...portfolio,
-      [selectedCoin.id]: {
-        qty:      (portfolio[selectedCoin.id]?.qty || 0) + qty,
-        avgPrice: price,
-        symbol:   selectedCoin.symbol,
-        label:    selectedCoin.label,
-      },
-    };
-
-    setBalance(newBalance);
-    setPortfolio(newPortfolio);
-    notify(`✅ Bought $${amount} of ${selectedCoin.symbol}`);
-    setTradeAmount("");
-    await saveToSupabase(newBalance, newPortfolio);
-  };
-
-  const handleSell = async () => {
-    const amount  = parseFloat(tradeAmount);
-    const price   = prices[selectedCoin.id]?.usd;
-    const holding = portfolio[selectedCoin.id];
-    if (!amount || !price || amount <= 0) return notify("⚠️ Enter a valid amount");
-    if (!holding || holding.qty * price < amount) return notify("⚠️ Not enough holdings");
-
-    const qty        = amount / price;
-    const newQty     = holding.qty - qty;
-    const newBalance = balance + amount;
-    const newPortfolio = {
-      ...portfolio,
-      [selectedCoin.id]: newQty <= 0
-        ? undefined
-        : { ...holding, qty: newQty },
-    };
-
-    setBalance(newBalance);
-    setPortfolio(newPortfolio);
-    notify(`✅ Sold $${amount} of ${selectedCoin.symbol}`);
-    setTradeAmount("");
-    await saveToSupabase(newBalance, newPortfolio);
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/signin");
-  };
-
-  const portfolioValue = Object.entries(portfolio).reduce((acc, [id, h]) => {
-    if (!h) return acc;
-    return acc + (prices[id]?.usd || 0) * h.qty;
-  }, 0);
-
-  const totalValue = balance + portfolioValue;
-  const pnl        = totalValue - STARTING_BALANCE;
-
-  const navItems = [
-    { icon: <LayoutDashboard size={20} />, label: "Dashboard" },
-    { icon: <Briefcase size={20} />,       label: "Portfolio"  },
-    { icon: <TrendingUp size={20} />,      label: "Markets"    },
-    { icon: <Search size={20} />,          label: "Discover"   },
-    { icon: <Settings size={20} />,        label: "Settings"   },
-  ];
-
-  const movers = [...COINS].sort((a, b) => {
-    const aChange = Math.abs(prices[a.id]?.usd_24h_change || 0);
-    const bChange = Math.abs(prices[b.id]?.usd_24h_change || 0);
-    return bChange - aChange;
-  }).slice(0, 4);
-
-  if (!dbLoaded) {
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-bg)" }}>
-      <div style={{ width: 44, height: 44, border: "4px solid #e2e8f0", borderTopColor: "#22c55e", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
+  // Calculate portfolio values
+  const portfolioValue = positions.reduce(
+    (a, p) => a + (prices[p.symbol]?.price || 0) * p.quantity, 
+    0
   );
-}
+  const totalValue = buyingPower + portfolioValue;
+  const pnl = totalValue - totalDeposited;
+  const pnlPct = totalDeposited > 0 ? (pnl / totalDeposited) * 100 : 0;
+
+  // Selected coin data
+  const coinPrice = prices[selectedCoin.symbol]?.price;
+  const coinChange = prices[selectedCoin.symbol]?.change24h;
+  const displayPrice = hoveredVal ?? coinPrice;
+  const isUp = (coinChange ?? 0) >= 0;
+  const ownedPosition = positions.find(p => p.symbol === selectedCoin.symbol);
+  const maxSellValue = ownedPosition ? ownedPosition.quantity * (coinPrice || 0) : 0;
+
+  // Handle Trade
+  const handleTrade = async (mode, amount) => {
+    const price = coinPrice;
+    if (!price) {
+      notify("Price unavailable", "error");
+      return false;
+    }
+    
+    const dollars = parseFloat(amount);
+    if (!dollars || dollars <= 0) {
+      notify("Enter a valid amount", "error");
+      return false;
+    }
+    
+    if (mode === "buy") {
+      if (dollars > buyingPower) {
+        notify("Insufficient buying power", "error");
+        return false;
+      }
+      
+      const qty = dollars / price;
+      const newBP = buyingPower - dollars;
+      const existing = positions.find(p => p.symbol === selectedCoin.symbol);
+      const newAvg = existing
+        ? ((existing.avg_buy_price * existing.quantity) + (price * qty)) / (existing.quantity + qty)
+        : price;
+      const newQty = (existing?.quantity || 0) + qty;
+      
+      setBuyingPower(newBP);
+      
+      const { data: upserted } = await supabase.from("positions").upsert({
+        user_id: userId,
+        symbol: selectedCoin.symbol,
+        name: selectedCoin.name,
+        asset_type: "crypto",
+        quantity: newQty,
+        avg_buy_price: newAvg,
+        ...(existing ? { id: existing.id } : {})
+      }, { onConflict: "user_id,symbol" }).select().single();
+      
+      if (upserted) {
+        setPositions(prev => {
+          const filtered = prev.filter(p => p.symbol !== selectedCoin.symbol);
+          return [...filtered, upserted];
+        });
+      }
+      
+      const { data: trade } = await supabase.from("trades").insert({
+        user_id: userId,
+        symbol: selectedCoin.symbol,
+        name: selectedCoin.name,
+        asset_type: "crypto",
+        trade_type: "buy",
+        quantity: qty,
+        price,
+        total: dollars
+      }).select().single();
+      
+      if (trade) setTrades(prev => [trade, ...prev]);
+      
+      await supabase.from("profiles").update({ 
+        buying_power: newBP
+      }).eq("id", userId);
+      
+      notify(`Bought ${fmtUSD(dollars)} of ${selectedCoin.symbol}`, "success");
+      return true;
+      
+    } else {
+      if (!ownedPosition) {
+        notify("You don't own this asset", "error");
+        return false;
+      }
+      
+      const maxSell = ownedPosition.quantity * price;
+      if (dollars > maxSell) {
+        notify(`Max sell: ${fmtUSD(maxSell)}`, "error");
+        return false;
+      }
+      
+      const qty = dollars / price;
+      const newQty = ownedPosition.quantity - qty;
+      const newBP = buyingPower + dollars;
+      
+      setBuyingPower(newBP);
+      
+      if (newQty <= 0.000001) {
+        await supabase.from("positions").delete().eq("id", ownedPosition.id);
+        setPositions(prev => prev.filter(p => p.symbol !== selectedCoin.symbol));
+      } else {
+        const { data: updated } = await supabase.from("positions")
+          .update({ quantity: newQty }).eq("id", ownedPosition.id).select().single();
+        if (updated) {
+          setPositions(prev => prev.map(p => p.symbol === selectedCoin.symbol ? updated : p));
+        }
+      }
+      
+      const { data: trade } = await supabase.from("trades").insert({
+        user_id: userId,
+        symbol: selectedCoin.symbol,
+        name: selectedCoin.name,
+        asset_type: "crypto",
+        trade_type: "sell",
+        quantity: qty,
+        price,
+        total: dollars
+      }).select().single();
+      
+      if (trade) setTrades(prev => [trade, ...prev]);
+      
+      await supabase.from("profiles").update({ 
+        buying_power: newBP
+      }).eq("id", userId);
+      
+      notify(`Sold ${fmtUSD(dollars)} of ${selectedCoin.symbol}`, "success");
+      return true;
+    }
+  };
+
+  // Handle Deposit
+  const handleDeposit = async (amount) => {
+    try {
+      const depositAmount = parseFloat(amount);
+      
+      if (!depositAmount || depositAmount <= 0) {
+        notify("Please enter a valid amount", "error");
+        return false;
+      }
+      
+      if (depositAmount > 50000) {
+        notify("Maximum deposit is $50,000 per transaction", "error");
+        return false;
+      }
+      
+      const newBuyingPower = buyingPower + depositAmount;
+      const newTotalDeposited = totalDeposited + depositAmount;
+      
+      setBuyingPower(newBuyingPower);
+      setTotalDeposited(newTotalDeposited);
+      
+      const { error } = await supabase
+        .from("profiles")
+        .upsert({
+          id: userId,
+          buying_power: newBuyingPower,
+          total_deposited: newTotalDeposited,
+          updated_at: new Date().toISOString()
+        });
+      
+      if (error) throw error;
+      
+      try {
+        await supabase.from("transactions").insert({
+          user_id: userId,
+          type: "deposit",
+          amount: depositAmount,
+          status: "completed",
+          created_at: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn("Transaction logging failed:", err);
+      }
+      
+      notify(`Successfully deposited ${fmtUSD(depositAmount)}!`, "success");
+      return true;
+      
+    } catch (error) {
+      console.error("Deposit failed:", error);
+      notify("Deposit failed. Please try again.", "error");
+      return false;
+    }
+  };
+
+  // Handle Withdraw
+  const handleWithdraw = async (amount, address) => {
+    try {
+      const withdrawAmount = parseFloat(amount);
+      const networkFee = 5;
+      const totalCost = withdrawAmount + networkFee;
+      
+      if (!withdrawAmount || withdrawAmount <= 0) {
+        notify("Please enter a valid amount", "error");
+        return false;
+      }
+      
+      if (withdrawAmount < 100) {
+        notify("Minimum withdrawal is $100", "error");
+        return false;
+      }
+      
+      if (totalCost > buyingPower) {
+        notify(`Insufficient funds including network fee. Need ${fmtUSD(totalCost)}`, "error");
+        return false;
+      }
+      
+      if (!address || address.length < 26) {
+        notify("Please enter a valid Bitcoin address", "error");
+        return false;
+      }
+      
+      const newBuyingPower = buyingPower - totalCost;
+      setBuyingPower(newBuyingPower);
+      
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          buying_power: newBuyingPower,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", userId);
+      
+      if (error) throw error;
+      
+      await supabase.from("transactions").insert({
+        user_id: userId,
+        type: "withdrawal",
+        amount: withdrawAmount,
+        status: "completed",
+        payment_method: "bitcoin",
+        crypto_address: address,
+        network_fee: networkFee,
+        created_at: new Date().toISOString()
+      });
+      
+      notify(`Successfully withdrew ${fmtUSD(withdrawAmount)}`, "success");
+      return true;
+      
+    } catch (error) {
+      console.error("Withdrawal failed:", error);
+      notify("Withdrawal failed. Please try again.", "error");
+      return false;
+    }
+  };
+
+  // Handle Investment
+  const handleInvest = async (plan, amount) => {
+    try {
+      const investedAmount = parseFloat(amount);
+      
+      if (!investedAmount || investedAmount <= 0) {
+        notify("Please enter a valid amount", "error");
+        return false;
+      }
+      
+      if (investedAmount > buyingPower) {
+        notify("Insufficient funds", "error");
+        return false;
+      }
+      
+      if (investedAmount < plan.minAmount) {
+        notify(`Minimum investment is ${fmtUSD(plan.minAmount)}`, "error");
+        return false;
+      }
+      
+      let daysToAdd = 30;
+      if (plan.term === "60 days") daysToAdd = 60;
+      if (plan.term === "90 days") daysToAdd = 90;
+      
+      const maturityDate = new Date();
+      maturityDate.setDate(maturityDate.getDate() + daysToAdd);
+      
+      const newBuyingPower = buyingPower - investedAmount;
+      setBuyingPower(newBuyingPower);
+      
+      const { data: newInvestment, error: investError } = await supabase
+        .from("investments")
+        .insert({
+          user_id: userId,
+          plan_name: plan.name,
+          amount: investedAmount,
+          expected_return_percent: plan.returnValue,
+          term_days: daysToAdd,
+          status: "active",
+          invested_at: new Date().toISOString(),
+          maturity_date: maturityDate.toISOString(),
+          current_value: investedAmount,
+          returns_earned: 0
+        })
+        .select()
+        .single();
+      
+      if (investError) throw investError;
+      
+      await supabase.from("profiles").update({ 
+        buying_power: newBuyingPower,
+        updated_at: new Date().toISOString()
+      }).eq("id", userId);
+      
+      await supabase.from("transactions").insert({
+        user_id: userId,
+        type: "investment",
+        amount: investedAmount,
+        status: "completed",
+        metadata: { plan_name: plan.name, term: plan.term },
+        created_at: new Date().toISOString()
+      });
+      
+      setInvestments(prev => [newInvestment, ...prev]);
+      
+      notify(`Successfully invested ${fmtUSD(investedAmount)} in ${plan.name}!`, "success");
+      return true;
+      
+    } catch (error) {
+      console.error("Investment failed:", error);
+      notify("Investment failed. Please try again.", "error");
+      return false;
+    }
+  };
+
+  if (!dbLoaded) return <LoadingSpinner />;
+
+  // Common props to pass to layouts
+  const commonProps = {
+    activeNav,
+    setActiveNav,
+    showCoinDetail,
+    setShowCoinDetail,
+    selectedCoin,
+    setSelectedCoin,
+    setShowTradeSheet,
+    setTradeMode,
+    coinPrice,
+    coinChange,
+    isUp,
+    displayPrice,
+    userName,
+    saving,
+    prices,
+    COINS,
+    totalValue,
+    pnl,
+    pnlPct,
+    chartData,
+    activeTime,
+    setActiveTime,
+    hoveredVal,
+    setHoveredVal,
+    buyingPower,
+    portfolioValue,
+    positions,
+    watchlist,
+    sparklines,
+    trades,
+    navigate,
+    ownedPosition,
+    setShowDepositSheet,
+    setShowWithdrawSheet,
+    setShowSearchSheet,
+    setShowInvestSheet,
+    toggleWatchlist,
+    HomeFeedComponent: HomeFeed,
+    HistoryViewComponent: HistoryView,
+    CoinDetailComponent: CoinDetail
+  };
 
   return (
-    <div className="dashboard">
+    <div style={{
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      background: "#f9fafb",
+      color: "#111827",
+      minHeight: "100vh",
+      WebkitFontSmoothing: "antialiased"
+    }}>
+      {!isMobile ? (
+        <DesktopLayout {...commonProps} />
+      ) : (
+        <MobileLayout {...commonProps} />
+      )}
 
-      {/* SIDEBAR */}
-      <aside className="sidebar">
-        <div className="sidebar-logo">N</div>
-        {navItems.map((item) => (
-          <div
-            key={item.label}
-            className={`nav-icon ${activeNav === item.label ? "active" : ""}`}
-            onClick={() => setActiveNav(item.label)}
-          >
-            {item.icon}
-            <span className="tooltip">{item.label}</span>
-          </div>
-        ))}
-        <div className="sidebar-bottom">
-          <div className="nav-icon" onClick={() => navigate("/profile")}>
-            <User size={20} />
-            <span className="tooltip">Profile</span>
-          </div>
-          <div className="nav-icon" style={{ color: "#ef4444" }} onClick={handleLogout}>
-            <LogOut size={20} />
-            <span className="tooltip">Logout</span>
-          </div>
-        </div>
-      </aside>
+      {/* Sheets */}
+      {showTradeSheet && (
+        <TradeSheet
+          isOpen={showTradeSheet}
+          onClose={() => setShowTradeSheet(false)}
+          selectedCoin={selectedCoin}
+          coinPrice={coinPrice}
+          tradeMode={tradeMode}
+          setTradeMode={setTradeMode}
+          buyingPower={buyingPower}
+          ownedPosition={ownedPosition}
+          maxSellValue={maxSellValue}
+          onTrade={handleTrade}
+          notification={notification}
+        />
+      )}
+      
+      {showDepositSheet && (
+        <DepositSheet
+          isOpen={showDepositSheet}
+          onClose={() => setShowDepositSheet(false)}
+          onDeposit={async (amount) => {
+            const success = await handleDeposit(amount);
+            if (success) setShowDepositSheet(false);
+            return success;
+          }}
+        />
+      )}
+      
+      {showWithdrawSheet && (
+        <WithdrawSheet
+          isOpen={showWithdrawSheet}
+          onClose={() => setShowWithdrawSheet(false)}
+          buyingPower={buyingPower}
+          onWithdraw={async (amount, address) => {
+            const success = await handleWithdraw(amount, address);
+            if (success) setShowWithdrawSheet(false);
+            return success;
+          }}
+        />
+      )}
+      
+      {showSearchSheet && (
+        <SearchSheet
+          isOpen={showSearchSheet}
+          onClose={() => setShowSearchSheet(false)}
+          positions={positions}
+          prices={prices}
+          setSelectedCoin={setSelectedCoin}
+          setShowCoinDetail={setShowCoinDetail}
+        />
+      )}
 
-      {/* TICKER BAR */}
-      <div className="ticker-wrap">
-        <div className="ticker-track">
-          {[...COINS, ...COINS].map((coin, i) => {
-            const p      = prices[coin.id];
-            const change = p?.usd_24h_change;
-            return (
-              <div key={i} className="ticker-item">
-                <span className="t-symbol">{coin.symbol}</span>
-                <span className="t-price">{p ? `$${p.usd.toLocaleString()}` : "..."}</span>
-                <span className={`t-change ${change >= 0 ? "up" : "down"}`}>
-                  {change ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%` : "..."}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      {showInvestSheet && (
+        <InvestSheet
+          isOpen={showInvestSheet}
+          onClose={() => setShowInvestSheet(false)}
+          buyingPower={buyingPower}
+          onInvest={handleInvest}
+        />
+      )}
 
-      {/* MAIN */}
-      <main className="main">
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-          <div>
-            <h2 style={{ fontSize: "16px", fontWeight: "700", color: "var(--color-text, #1a1a2e)", margin: 0 }}>
-              Welcome back, {userName.split(" ")[0]} 👋
-            </h2>
-            <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>{userEmail}</p>
-          </div>
-          {saving && (
-            <span style={{ fontSize: "11px", color: "#94a3b8", display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ width: 10, height: 10, border: "2px solid #cbd5e1", borderTopColor: "#64748b", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />
-              Saving...
-            </span>
-          )}
-        </div>
-
-        <div className="search-bar">
-          <Search size={16} color="#94a3b8" />
-          <input
-            placeholder="Search coins..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          {COINS.filter(c =>
-            c.symbol.toLowerCase().includes(search.toLowerCase()) ||
-            c.label.toLowerCase().includes(search.toLowerCase()) ||
-            search === ""
-          ).map((coin) => (
-            <button
-              key={coin.id}
-              className={`coin-btn ${selectedCoin.id === coin.id ? "active" : ""}`}
-              onClick={() => setSelectedCoin(coin)}
-            >
-              {coin.symbol}
-            </button>
-          ))}
-        </div>
-
-        <div className="chart-box">
-          <div style={{ marginBottom: "12px" }}>
-            <h2 style={{ fontSize: "18px", fontWeight: "700" }}>{selectedCoin.label}</h2>
-            <p style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
-              {prices[selectedCoin.id]
-                ? `$${prices[selectedCoin.id].usd.toLocaleString()} · `
-                : "Loading... · "}
-              <span className={prices[selectedCoin.id]?.usd_24h_change >= 0 ? "up" : "down"}>
-                {prices[selectedCoin.id]?.usd_24h_change
-                  ? `${prices[selectedCoin.id].usd_24h_change.toFixed(2)}% today`
-                  : ""}
-              </span>
-            </p>
-          </div>
-          <Chart data={chartData} />
-        </div>
-
-        <div className="trade-box">
-          <p style={{ fontSize: "14px", fontWeight: "600", marginBottom: "12px", color: "#1a1a2e" }}>
-            Trade {selectedCoin.symbol}
-          </p>
-          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-            <input
-              type="number"
-              placeholder="Amount in USD"
-              value={tradeAmount}
-              onChange={(e) => setTradeAmount(e.target.value)}
-              style={{ flex: 1, padding: "10px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", color: "#1a1a2e", fontSize: "14px", outline: "none" }}
-            />
-            <button className="buy-btn" onClick={handleBuy}>Buy</button>
-            <button className="sell-btn" onClick={handleSell}>Sell</button>
-          </div>
-          {notification && (
-            <p style={{ marginTop: "10px", fontSize: "13px", color: notification.includes("⚠️") ? "#ef4444" : "#22c55e" }}>
-              {notification}
-            </p>
-          )}
-        </div>
-
-        <div className="stats">
-          <div className="card">
-            💼 Portfolio Value
-            <strong>${portfolioValue.toFixed(2)}</strong>
-          </div>
-          <div className="card">
-            💰 Cash Balance
-            <strong>${balance.toFixed(2)}</strong>
-          </div>
-          <div className="card">
-            📈 Total P&L
-            <strong style={{ color: pnl >= 0 ? "#22c55e" : "#ef4444" }}>
-              {pnl >= 0 ? "+" : ""}{pnl.toFixed(2)}
-            </strong>
+      {/* Notification Toast */}
+      {notification && (
+        <div style={{
+          position: "fixed",
+          bottom: 24,
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 2000,
+          animation: "slideUp 0.3s ease"
+        }}>
+          <div style={{
+            padding: "12px 20px",
+            borderRadius: 12,
+            background: notification.type === "success" ? "#10b981" : "#ef4444",
+            color: "#fff",
+            fontSize: 14,
+            fontWeight: 500,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            display: "flex",
+            alignItems: "center",
+            gap: 8
+          }}>
+            {notification.type === "success" ? "✓" : "⚠️"}
+            {notification.msg}
           </div>
         </div>
+      )}
 
-        <div>
-          <h3 style={{ fontSize: "16px", fontWeight: "700", marginBottom: "12px", color: "#1a1a2e" }}>
-            🔥 Big Movers
-          </h3>
-          <div className="movers-grid">
-            {movers.map((coin) => {
-              const p      = prices[coin.id];
-              const change = p?.usd_24h_change;
-              return (
-                <div key={coin.id} className="mover-card" onClick={() => setSelectedCoin(coin)} style={{ cursor: "pointer" }}>
-                  <div className="m-symbol">{coin.symbol}</div>
-                  <div className="m-price">{p ? `$${p.usd.toLocaleString()}` : "Loading..."}</div>
-                  <div className={`m-change ${change >= 0 ? "up" : "down"}`}>
-                    {change ? `${change >= 0 ? "▲" : "▼"} ${Math.abs(change).toFixed(2)}%` : "..."}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-      </main>
-
-      {/* RIGHT PANEL */}
-      <aside className="right">
-        <div style={{ paddingTop: "16px" }}>
-          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "12px", padding: "16px", marginBottom: "20px" }}>
-            <p style={{ fontSize: "13px", fontWeight: "600", color: "#15803d" }}>💰 Cash Balance</p>
-            <p style={{ fontSize: "22px", fontWeight: "800", color: "#1a1a2e", margin: "4px 0" }}>
-              ${balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <p style={{ fontSize: "12px", color: pnl >= 0 ? "#22c55e" : "#ef4444", fontWeight: "600" }}>
-              {pnl >= 0 ? "▲" : "▼"} ${Math.abs(pnl).toFixed(2)} total P&L
-            </p>
-          </div>
-
-          <h3>Watchlist</h3>
-          {COINS.map((coin) => {
-            const p      = prices[coin.id];
-            const change = p?.usd_24h_change;
-            return (
-              <div key={coin.id} className="asset" onClick={() => setSelectedCoin(coin)}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <strong style={{ fontSize: "14px" }}>{coin.symbol}</strong>
-                  <span className={change >= 0 ? "up" : "down"} style={{ fontSize: "12px", fontWeight: "600" }}>
-                    {change ? `${change.toFixed(2)}%` : "..."}
-                  </span>
-                </div>
-                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>
-                  {p ? `$${p.usd.toLocaleString()}` : "Loading..."}
-                </div>
-              </div>
-            );
-          })}
-
-          <h3>My Holdings</h3>
-          {Object.entries(portfolio).filter(([, h]) => h).length === 0
-            ? <p style={{ opacity: 0.4, fontSize: "13px" }}>No holdings yet</p>
-            : Object.entries(portfolio).filter(([, h]) => h).map(([id, h]) => (
-              <div key={id} className="asset">
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <strong style={{ fontSize: "14px" }}>{h.symbol}</strong>
-                  <span style={{ fontSize: "12px", color: "#64748b" }}>{h.qty.toFixed(6)}</span>
-                </div>
-                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>
-                  ≈ ${((prices[id]?.usd || 0) * h.qty).toFixed(2)}
-                </div>
-              </div>
-            ))
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(20px);
           }
-        </div>
-      </aside>
-
+          to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+          }
+        }
+        
+        * {
+          box-sizing: border-box;
+        }
+        
+        ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+          background: #f3f4f6;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+          background: #d1d5db;
+          border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+          background: #9ca3af;
+        }
+        
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        
+        input[type=number] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
     </div>
   );
 }
-
-export default Dashboard;

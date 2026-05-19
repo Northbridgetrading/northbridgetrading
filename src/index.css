@@ -40,8 +40,6 @@ h1, h2, h3 {
 ========================= */
 button {
   font-family: inherit;
-  border: none;
-  background: none;
   cursor: pointer;
 }
 
@@ -55,8 +53,8 @@ a {
    (this is your consistency engine)
 ========================= */
 :root {
-  --color-primary: #f9f871;   /* lemon */
-  --color-text: #000000;
+  --color-primary: #1E4A7C;   /* lemon */
+  --color-text: #ffffff;
   --color-muted: rgba(0,0,0,0.6);
   --color-border: rgba(0,0,0,0.1);
   --color-hover: rgba(0,0,0,0.06);
