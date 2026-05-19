@@ -19,11 +19,11 @@ import { MobileLayout } from "../components/layout/MobileLayout";
 import { HomeFeed } from "../components/dashboard/HomeFeed";
 import { HistoryView } from "../components/dashboard/HistoryView";
 import { CoinDetail } from "../components/dashboard/CoinDetail";
-import { TradeSheet } from "../components/sheets/TradeSheet";
-import { DepositSheet } from "../components/sheets/DepositSheet";
-import { WithdrawSheet } from "../components/sheets/WithdrawSheet";
-import { SearchSheet } from "../components/sheets/SearchSheet";
-import { InvestSheet } from "../components/sheets/InvestSheet";
+import { TradeSheet } from "../components/Sheets/TradeSheet";
+import { DepositSheet } from "../components/Sheets/DepositSheet";
+import { WithdrawSheet } from "../components/Sheets/WithdrawSheet";
+import { SearchSheet } from "../components/Sheets/SearchSheet";
+import { InvestSheet } from "../components/Sheets/InvestSheet";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 
 export default function Dashboard({ session }) {
