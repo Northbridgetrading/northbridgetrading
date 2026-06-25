@@ -12,6 +12,7 @@ import { useIsMobile } from "../hooks/useIsMobile";
 import { usePrices } from "../hooks/usePrices";
 import { useSparklines } from "../hooks/useSparklines";
 import { useChartData } from "../hooks/useChartData";
+import { useDepositListener } from "../hooks/useDepositListener";
 
 // Components
 import { DesktopLayout } from "../components/layout/DesktopLayout";
@@ -25,6 +26,7 @@ import { WithdrawSheet } from "../components/Sheets/WithdrawSheet";
 import { SearchSheet } from "../components/Sheets/SearchSheet";
 import { InvestSheet } from "../components/Sheets/InvestSheet";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
+import { calculateInvestmentState } from "../Utils/investmentUtils";
 
 export default function Dashboard({ session }) {
   const navigate = useNavigate();
@@ -107,6 +109,34 @@ export default function Dashboard({ session }) {
     setNotification({ msg, type });
     notifTimer.current = setTimeout(() => setNotification(null), 3500);
   }, []);
+
+
+  // Realtime deposit listener
+  useDepositListener(
+  userId,
+  (deposit) => {
+    // Play a success chime
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.frequency.setValueAtTime(523, ctx.currentTime);
+    o.frequency.setValueAtTime(659, ctx.currentTime + 0.1);
+    o.frequency.setValueAtTime(784, ctx.currentTime + 0.2);
+    g.gain.setValueAtTime(0.3, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    o.start(ctx.currentTime);
+    o.stop(ctx.currentTime + 0.6);
+
+    setBuyingPower(prev => prev + deposit.amount);
+    setTotalDeposited(prev => prev + deposit.amount);
+    notify(`🎉 Deposit of ${fmtUSD(deposit.amount)} approved!`, "success");
+  },
+  (deposit) => {
+    notify(`Your deposit of ${fmtUSD(deposit.amount)} was rejected. Contact support.`, "error");
+  }
+);
 
   // Toggle Watchlist
   const toggleWatchlist = useCallback(async (coin) => {
@@ -454,6 +484,48 @@ export default function Dashboard({ session }) {
     }
   };
 
+  const handleClaimInvestment = async (investment) => {
+  try {
+    const calculated = calculateInvestmentState(investment);
+    const payout = calculated.finalPayout;
+
+    const newBuyingPower = buyingPower + payout;
+    setBuyingPower(newBuyingPower);
+
+    await supabase.from("investments").update({
+      status: "completed",
+      current_value: payout,
+      returns_earned: payout - investment.amount,
+    }).eq("id", investment.id);
+
+    await supabase.from("profiles").update({
+      buying_power: newBuyingPower,
+      updated_at: new Date().toISOString()
+    }).eq("id", userId);
+
+    await supabase.from("transactions").insert({
+      user_id: userId,
+      type: "investment_payout",
+      amount: payout,
+      status: "completed",
+      metadata: { plan_name: investment.plan_name, investment_id: investment.id },
+      created_at: new Date().toISOString()
+    });
+
+    setInvestments(prev => prev.map(inv =>
+      inv.id === investment.id ? { ...inv, status: "completed", current_value: payout } : inv
+    ));
+
+    notify(`🎉 Claimed ${fmtUSD(payout)} from ${investment.plan_name}!`, "success");
+    return true;
+
+  } catch (error) {
+    console.error("Claim failed:", error);
+    notify("Failed to claim investment. Please try again.", "error");
+    return false;
+  }
+};
+
   if (!dbLoaded) return <LoadingSpinner />;
 
   // Common props to pass to layouts
@@ -467,6 +539,7 @@ export default function Dashboard({ session }) {
     setShowTradeSheet,
     setTradeMode,
     coinPrice,
+    handleClaimInvestment,
     coinChange,
     isUp,
     displayPrice,
@@ -484,6 +557,7 @@ export default function Dashboard({ session }) {
     setHoveredVal,
     buyingPower,
     portfolioValue,
+    userId,
     positions,
     watchlist,
     sparklines,
@@ -532,16 +606,12 @@ export default function Dashboard({ session }) {
       )}
       
       {showDepositSheet && (
-        <DepositSheet
-          isOpen={showDepositSheet}
-          onClose={() => setShowDepositSheet(false)}
-          onDeposit={async (amount) => {
-            const success = await handleDeposit(amount);
-            if (success) setShowDepositSheet(false);
-            return success;
-          }}
-        />
-      )}
+  <DepositSheet
+    isOpen={showDepositSheet}
+    onClose={() => setShowDepositSheet(false)}
+    userId={userId}
+  />
+)}
       
       {showWithdrawSheet && (
         <WithdrawSheet

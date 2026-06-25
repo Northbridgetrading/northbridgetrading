@@ -106,7 +106,7 @@ export default function CryptoSection() {
             muted
             loop
             playsInline
-            className="relative z-10 w-[620px] max-w-full rounded-[28px] object-cover shadow-[0_40px_80px_rgba(0,0,0,0.35)]"
+            className="relative z-10 w-[420px] max-w-full -[28px] object-cover shadow-[0_40px_80px_rgba(0,0,0,0.35)]"
             style={{
               transform: "perspective(1200px) rotateY(-8deg)",
             }}

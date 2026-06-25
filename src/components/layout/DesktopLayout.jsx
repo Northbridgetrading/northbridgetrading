@@ -29,9 +29,11 @@ export const DesktopLayout = ({
   HistoryViewComponent,
   CoinDetailComponent,
   totalValue,
+  userId,
   pnl,
   pnlPct,
   chartData,
+  handleClaimInvestment,
   activeTime,
   setActiveTime,
   hoveredVal,
@@ -59,8 +61,8 @@ export const DesktopLayout = ({
 
   const totalGainLoss = pnl || 0;
   const totalGainLossPct = pnlPct || 0;
-  const investedPercentage = totalValue > 0 
-    ? Math.min(100, ((portfolioValue || 0) / totalValue) * 100) 
+  const investedPercentage = totalValue > 0
+    ? Math.min(100, ((portfolioValue || 0) / totalValue) * 100)
     : 0;
 
   const navItems = [
@@ -75,7 +77,7 @@ export const DesktopLayout = ({
     <div className="flex h-screen w-screen bg-gray-50 overflow-hidden font-sans antialiased">
       {/* Left Sidebar */}
       <aside className="w-[72px] min-w-[72px] shrink-0 bg-white border-r border-gray-200 flex flex-col items-center py-6 gap-8 h-screen z-10">
-        <button 
+        <button
           onClick={() => { setActiveNav("home"); setShowCoinDetail(false); }}
           className="w-11 h-11 rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white font-bold text-xl cursor-pointer shrink-0 hover:shadow-lg hover:shadow-teal-500/25 transition-all duration-200 hover:scale-105 active:scale-95"
           aria-label="Home"
@@ -101,14 +103,14 @@ export const DesktopLayout = ({
                 className={`
                   w-11 h-11 rounded-xl flex items-center justify-center shrink-0
                   transition-all duration-200 relative group
-                  ${isActive 
-                    ? "bg-teal-50 text-teal-600 shadow-sm ring-1 ring-teal-100" 
+                  ${isActive
+                    ? "bg-teal-50 text-teal-600 shadow-sm ring-1 ring-teal-100"
                     : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"
                   }
                 `}
               >
-                <item.icon 
-                  size={isActive ? 22 : 20} 
+                <item.icon
+                  size={isActive ? 22 : 20}
                   strokeWidth={isActive ? 2.5 : 1.75}
                 />
                 <div className="absolute left-full ml-3 px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 whitespace-nowrap z-50 shadow-lg">
@@ -124,11 +126,11 @@ export const DesktopLayout = ({
           <button
             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
             className={`
-              w-11 h-11 rounded-full border-2 flex items-center justify-center 
+              w-11 h-11 rounded-full border-2 flex items-center justify-center
               text-sm font-bold text-gray-700 shrink-0
               transition-all duration-200
-              ${isProfileMenuOpen 
-                ? "border-teal-500 bg-teal-50 ring-4 ring-teal-100 shadow-md" 
+              ${isProfileMenuOpen
+                ? "border-teal-500 bg-teal-50 ring-4 ring-teal-100 shadow-md"
                 : "border-gray-200 bg-gradient-to-br from-gray-100 to-gray-50 hover:border-teal-400 hover:shadow-md"
               }
             `}
@@ -142,7 +144,7 @@ export const DesktopLayout = ({
                 onClick={() => setIsProfileMenuOpen(false)}
                 className="fixed inset-0 z-30"
               />
-              
+
               <div className="fixed bottom-6 left-20 bg-white rounded-2xl shadow-xl shadow-gray-900/10 py-2 min-w-[220px] z-40 border border-gray-100 animate-fadeIn">
                 <div className="px-4 py-3 border-b border-gray-100">
                   <div className="flex items-center gap-3">
@@ -186,9 +188,9 @@ export const DesktopLayout = ({
         {/* Main Feed */}
         <main className="flex-1 min-w-0 bg-white border-r border-gray-200 overflow-y-auto overflow-x-hidden">
           {activeNav === "history" ? (
-            <HistoryViewComponent isMobile={false} trades={trades} />
+            <HistoryViewComponent isMobile={false} trades={trades} userId={userId} />
           ) : activeNav === "portfolio" ? (
-            <PortfolioView 
+            <PortfolioView
               positions={positions}
               prices={prices}
               buyingPower={buyingPower}
@@ -201,6 +203,7 @@ export const DesktopLayout = ({
               setShowInvestSheet={setShowInvestSheet}
               setShowWithdrawSheet={setShowWithdrawSheet}
               investments={investments}
+              onClaimInvestment={handleClaimInvestment}
             />
           ) : showCoinDetail ? (
             <CoinDetailComponent
@@ -258,7 +261,7 @@ export const DesktopLayout = ({
             <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
             <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
             <div className="absolute top-1/2 right-4 w-20 h-20 bg-white/5 rounded-full -translate-y-1/2" />
-            
+
             <div className="relative">
               <div className="flex items-center gap-2 mb-3">
                 <PieChart size={16} className="opacity-80" />
@@ -271,8 +274,8 @@ export const DesktopLayout = ({
                 <div className={`
                   flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
                   backdrop-blur-sm border
-                  ${totalGainLoss >= 0 
-                    ? "bg-emerald-400/20 border-emerald-300/30" 
+                  ${totalGainLoss >= 0
+                    ? "bg-emerald-400/20 border-emerald-300/30"
                     : "bg-red-400/20 border-red-300/30"
                   }
                 `}>
@@ -339,7 +342,7 @@ export const DesktopLayout = ({
                 <span className="text-gray-900 font-semibold tabular-nums">{Math.round(investedPercentage)}%</span>
               </div>
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-gradient-to-r from-teal-400 to-teal-500 rounded-full transition-all duration-700 ease-out shadow-sm"
                   style={{ width: `${investedPercentage}%` }}
                 />
@@ -384,7 +387,7 @@ export const DesktopLayout = ({
                 const p = prices?.[coin.symbol];
                 const up = (p?.change24h ?? 0) >= 0;
                 const isSelected = selectedCoin?.symbol === coin.symbol;
-                
+
                 return (
                   <div
                     key={coin.id}
@@ -392,19 +395,19 @@ export const DesktopLayout = ({
                     className={`
                       flex items-center justify-between p-3 rounded-xl cursor-pointer
                       transition-all duration-200 bg-white border
-                      ${isSelected 
-                        ? "border-teal-200 bg-teal-50/50 shadow-sm ring-1 ring-teal-100" 
+                      ${isSelected
+                        ? "border-teal-200 bg-teal-50/50 shadow-sm ring-1 ring-teal-100"
                         : "border-transparent hover:border-gray-200 hover:shadow-sm"
                       }
                     `}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="relative">
-                        <div 
+                        <div
                           className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 font-bold"
-                          style={{ 
+                          style={{
                             background: `linear-gradient(135deg, ${coin.color}20, ${coin.color}10)`,
-                            color: coin.color 
+                            color: coin.color
                           }}
                         >
                           {coin.icon}

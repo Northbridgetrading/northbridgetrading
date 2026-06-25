@@ -41,7 +41,7 @@ export default function TradingSection() {
             muted
             loop
             playsInline
-            className="relative z-10 w-[620px] max-w-full rounded-[28px] shadow-[0_40px_80px_rgba(0,0,0,0.7)] object-cover"
+            className="relative z-10 w-[620px] max-w-full -[28px] shadow-[0_40px_80px_rgba(0,0,0,0.7)] object-cover"
             style={{
               transform: "perspective(1200px) rotateY(8deg)",
             }}

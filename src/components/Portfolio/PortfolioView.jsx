@@ -1,31 +1,25 @@
 // src/components/portfolio/PortfolioView.jsx
 import React, { useState } from 'react';
-import { 
-  PieChart, TrendingUp, TrendingDown, Wallet, Bitcoin, 
-  Clock, ArrowUpRight, ArrowDownRight, Activity,
-  Lock, Calendar, DollarSign, Percent, BarChart3,
-  ChevronRight, Eye, EyeOff, PlusCircle, Send
+import {
+  PieChart, TrendingUp, Wallet, Bitcoin,
+  ArrowUpRight, ArrowDownRight, Activity,
+  BarChart3, Eye, EyeOff, PlusCircle, Send
 } from 'lucide-react';
 import { fmtUSD, fmt } from '../../Utils/formatters';
+import ActiveInvestments from './ActiveInvestments';
 
 // Component for Crypto Holdings
 const CryptoHoldings = ({ positions, prices, onSelectCoin }) => {
   const [showZeroBalances, setShowZeroBalances] = useState(false);
-  
+
   const holdingsWithValues = positions?.map(pos => {
     const currentPrice = prices?.[pos.symbol]?.price || 0;
     const currentValue = currentPrice * pos.quantity;
     const pnl = currentValue - (pos.avg_buy_price * pos.quantity);
     const pnlPct = (pnl / (pos.avg_buy_price * pos.quantity)) * 100;
-    
-    return {
-      ...pos,
-      currentPrice,
-      currentValue,
-      pnl,
-      pnlPct
-    };
-  }).filter(h => showZeroBalances || h.currentValue > 0.01);
+
+    return { ...pos, currentPrice, currentValue, pnl, pnlPct };
+  }).filter(h => showZeroBalances || h.currentValue > 0.01) || [];
 
   const totalCryptoValue = holdingsWithValues.reduce((sum, h) => sum + h.currentValue, 0);
 
@@ -58,7 +52,7 @@ const CryptoHoldings = ({ positions, prices, onSelectCoin }) => {
       <div className="space-y-3">
         {holdingsWithValues.map((holding) => {
           const isUp = holding.pnl >= 0;
-          
+
           return (
             <div
               key={holding.symbol}
@@ -93,157 +87,21 @@ const CryptoHoldings = ({ positions, prices, onSelectCoin }) => {
   );
 };
 
-// Component for Active Investments
-const ActiveInvestments = ({ investments = [], onViewDetails }) => {
-  const [expandedId, setExpandedId] = useState(null);
-
-  const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
-  const totalCurrentValue = investments.reduce((sum, inv) => sum + (inv.current_value || inv.amount), 0);
-  const totalReturns = totalCurrentValue - totalInvested;
-
-  if (investments.length === 0) {
-    return (
-      <div className="text-center py-12 bg-gray-50 rounded-2xl">
-        <TrendingUp size={48} className="mx-auto text-gray-300 mb-3" />
-        <p className="text-gray-500 font-medium">No active investments</p>
-        <p className="text-sm text-gray-400 mt-1">Start investing to grow your wealth</p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {/* Investments Summary */}
-      <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl p-4 mb-6 text-white">
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <p className="text-xs opacity-80 mb-1">Total Invested</p>
-            <p className="text-xl font-bold">{fmtUSD(totalInvested)}</p>
-          </div>
-          <div>
-            <p className="text-xs opacity-80 mb-1">Current Value</p>
-            <p className="text-xl font-bold">{fmtUSD(totalCurrentValue)}</p>
-          </div>
-          <div>
-            <p className="text-xs opacity-80 mb-1">Total Returns</p>
-            <p className={`text-xl font-bold ${totalReturns >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-              {totalReturns >= 0 ? '+' : ''}{fmtUSD(totalReturns)}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Individual Investments */}
-      <div className="space-y-4">
-        {investments.map((investment) => {
-          const isExpanded = expandedId === investment.id;
-          const daysLeft = Math.ceil((new Date(investment.maturity_date) - new Date()) / (1000 * 60 * 60 * 24));
-          const progress = investment.progress || Math.min(100, Math.max(0, ((investment.amount - (investment.current_value || investment.amount)) / investment.amount) * 100));
-          
-          return (
-            <div key={investment.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md transition-all">
-              <div className="p-4">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-gray-900">{investment.plan_name}</h4>
-                      <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-semibold">
-                        {investment.status || 'Active'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">Invested {fmtUSD(investment.amount)} on {new Date(investment.invested_at).toLocaleDateString()}</p>
-                  </div>
-                  <button
-                    onClick={() => setExpandedId(isExpanded ? null : investment.id)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <ChevronRight size={20} className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4 mb-3">
-                  <div>
-                    <p className="text-xs text-gray-500">Expected Return</p>
-                    <p className="text-sm font-bold text-purple-600">+{investment.expected_return_percent}%</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Current Returns</p>
-                    <p className="text-sm font-bold text-green-600">+{fmtUSD(investment.returns_earned || 0)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Days Left</p>
-                    <p className="text-sm font-bold text-gray-900">{daysLeft > 0 ? daysLeft : 0} days</p>
-                  </div>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-500">Progress to maturity</span>
-                    <span className="font-semibold text-gray-900">{Math.round(progress)}%</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2">
-                    <div 
-                      className="bg-gradient-to-r from-purple-400 to-purple-500 rounded-full h-2 transition-all duration-500"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Expanded Details */}
-                {isExpanded && (
-                  <div className="mt-4 pt-4 border-t border-gray-100 space-y-3 animate-fadeIn">
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <p className="text-gray-500">Investment Date</p>
-                        <p className="font-semibold text-gray-900">{new Date(investment.invested_at).toLocaleDateString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Maturity Date</p>
-                        <p className="font-semibold text-gray-900">{new Date(investment.maturity_date).toLocaleDateString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Term Length</p>
-                        <p className="font-semibold text-gray-900">{investment.term_days} days</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Expected Total</p>
-                        <p className="font-semibold text-purple-600">
-                          {fmtUSD(investment.amount * (1 + investment.expected_return_percent / 100))}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <button 
-                      onClick={() => onViewDetails?.(investment)}
-                      className="w-full mt-2 py-2 rounded-lg border-2 border-purple-200 text-purple-600 font-semibold text-sm hover:bg-purple-50 transition-colors"
-                    >
-                      View Full Details →
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
 // Main Portfolio View Component
-const PortfolioView = ({ 
-  positions = [], 
-  prices = {}, 
+const PortfolioView = ({
+  positions = [],
+  prices = {},
   buyingPower = 0,
   totalValue = 0,
   pnl = 0,
   pnlPct = 0,
   setSelectedCoin,
   setShowCoinDetail,
-  setShowDepositSheet,  // Add this prop
-  setShowInvestSheet,   // Add this prop
-  investments = []       // Add this prop
+  setShowDepositSheet,
+  setShowInvestSheet,
+  setShowWithdrawSheet,
+  investments = [],
+  onClaimInvestment
 }) => {
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -253,51 +111,44 @@ const PortfolioView = ({
   }, 0);
 
   const stats = [
-    { label: "Total Portfolio", value: fmtUSD(totalValue), icon: PieChart, color: "purple", action: null },
-    { label: "Crypto Holdings", value: fmtUSD(totalCryptoValue), icon: Bitcoin, color: "orange", action: null },
-    { label: "Active Investments", value: fmtUSD(investments.reduce((s, i) => s + (i.current_value || i.amount), 0)), icon: TrendingUp, color: "green", action: null },
-    { label: "Buying Power", value: fmtUSD(buyingPower), icon: Wallet, color: "blue", action: null }
+    { label: "Total Portfolio", value: fmtUSD(totalValue), icon: PieChart, color: "purple" },
+    { label: "Crypto Holdings", value: fmtUSD(totalCryptoValue), icon: Bitcoin, color: "orange" },
+    { label: "Active Investments", value: fmtUSD(investments.reduce((s, i) => s + (i.current_value || i.amount), 0)), icon: TrendingUp, color: "green" },
+    { label: "Buying Power", value: fmtUSD(buyingPower), icon: Wallet, color: "blue" }
   ];
 
   const quickActions = [
-    { 
-      label: "Deposit Funds", 
-      icon: PlusCircle, 
-      color: "teal", 
-      bgColor: "bg-teal-50", 
+    {
+      label: "Deposit Funds",
+      icon: PlusCircle,
+      bgColor: "bg-teal-50",
       textColor: "text-teal-600",
       hoverColor: "hover:bg-teal-100",
       action: () => setShowDepositSheet?.(true)
     },
-    { 
-      label: "Start New Investment", 
-      icon: TrendingUp, 
-      color: "purple", 
-      bgColor: "bg-purple-50", 
+    {
+      label: "Start New Investment",
+      icon: TrendingUp,
+      bgColor: "bg-purple-50",
       textColor: "text-purple-600",
       hoverColor: "hover:bg-purple-100",
       action: () => setShowInvestSheet?.(true)
     },
-    { 
-      label: "Withdraw Funds", 
-      icon: Send, 
-      color: "orange", 
-      bgColor: "bg-orange-50", 
+    {
+      label: "Withdraw Funds",
+      icon: Send,
+      bgColor: "bg-orange-50",
       textColor: "text-orange-600",
       hoverColor: "hover:bg-orange-100",
-      action: () => setShowDepositSheet?.(false) // This would need a setShowWithdrawSheet
+      action: () => setShowWithdrawSheet?.(true)
     },
-    { 
-      label: "View Markets", 
-      icon: BarChart3, 
-      color: "blue", 
-      bgColor: "bg-blue-50", 
+    {
+      label: "View Markets",
+      icon: BarChart3,
+      bgColor: "bg-blue-50",
       textColor: "text-blue-600",
       hoverColor: "hover:bg-blue-100",
-      action: () => {
-        // Navigate to markets tab - you can implement this
-        console.log("Navigate to markets");
-      }
+      action: () => console.log("Navigate to markets")
     }
   ];
 
@@ -348,8 +199,8 @@ const PortfolioView = ({
                 onClick={() => setActiveTab(tab.id)}
                 className={`
                   pb-3 px-1 flex items-center gap-2 border-b-2 transition-all
-                  ${activeTab === tab.id 
-                    ? 'border-purple-500 text-purple-600' 
+                  ${activeTab === tab.id
+                    ? 'border-purple-500 text-purple-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                   }
                 `}
@@ -438,7 +289,7 @@ const PortfolioView = ({
         )}
 
         {activeTab === 'crypto' && (
-          <CryptoHoldings 
+          <CryptoHoldings
             positions={positions}
             prices={prices}
             onSelectCoin={(symbol) => {
@@ -452,11 +303,11 @@ const PortfolioView = ({
         )}
 
         {activeTab === 'investments' && (
-          <ActiveInvestments 
+          <ActiveInvestments
             investments={investments}
+            onClaim={onClaimInvestment}
             onViewDetails={(investment) => {
               console.log("View details for:", investment);
-              // You can add a modal or navigate to investment details page
             }}
           />
         )}

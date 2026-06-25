@@ -32,7 +32,7 @@ export default function AdminUsers() {
   const updateBalance = async (userId) => {
     const val = parseFloat(editBalance);
     if (isNaN(val) || val < 0) return notify("❌ Invalid balance");
-    await supabase.from("profiles").update({ balance: val }).eq("id", userId);
+    await supabase.from("profiles").update({ buying_power: val }).eq("id", userId);
     notify("✅ Balance updated");
     setEditing(null);
     load();
@@ -78,7 +78,7 @@ export default function AdminUsers() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "#f8fafc" }}>
-              {["User", "Country", "Balance", "Status", "Joined", "Actions"].map(h => (
+              {["User", "Country", "Buying Power", "Status", "Joined", "Actions"].map(h => (
                 <th key={h} style={{ padding: "12px 20px", textAlign: "left", fontSize: "12px", fontWeight: "600", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
               ))}
             </tr>
@@ -112,7 +112,7 @@ export default function AdminUsers() {
                     </div>
                   ) : (
                     <span style={{ fontWeight: "700", fontSize: "14px", color: "#0f172a" }}>
-                      ${(user.balance || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      ${(user.buying_power || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </span>
                   )}
                 </td>
@@ -127,7 +127,7 @@ export default function AdminUsers() {
                 </td>
                 <td style={{ padding: "14px 20px" }}>
                   <div style={{ display: "flex", gap: "6px" }}>
-                    <ActionBtn icon={<Edit2 size={14} />} color="#3b82f6" title="Edit Balance" onClick={() => { setEditing(user.id); setEditBalance(user.balance || 0); }} />
+                    <ActionBtn icon={<Edit2 size={14} />} color="#3b82f6" title="Edit Balance" onClick={() => { setEditing(user.id); setEditBalance(user.buying_power || 0); }} />
                     <ActionBtn icon={user.is_suspended ? <CheckCircle size={14} /> : <Ban size={14} />} color={user.is_suspended ? "#22c55e" : "#f59e0b"} title={user.is_suspended ? "Unsuspend" : "Suspend"} onClick={() => toggleSuspend(user)} />
                     <ActionBtn icon={<Trash2 size={14} />} color="#ef4444" title="Delete User" onClick={() => deleteUser(user.id)} />
                   </div>

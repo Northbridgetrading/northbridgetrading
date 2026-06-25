@@ -60,7 +60,7 @@ export default function SignUp() {
     try {
       setLoading(true)
 
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -68,22 +68,21 @@ export default function SignUp() {
             full_name: fullName,
             phone,
             country
-          }
+          },
+          emailRedirectTo: null
         }
       })
 
       if (signUpError) throw signUpError
 
-      if (data?.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            balance: 10000
-          })
+      // Auto confirm the user via SQL trigger (make sure trigger is set up)
+      // Then sign in immediately
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
 
-        if (profileError) throw profileError
-      }
+      if (signInError) throw signInError
 
       setSuccess('Account created successfully. Redirecting...')
       setTimeout(() => navigate('/dashboard'), 1200)
@@ -226,7 +225,6 @@ export default function SignUp() {
               <input className="su-input" type="email" name="email" value={form.email} onChange={handleChange} />
             </div>
 
-            
             <div>
               <label className="su-label">Phone</label>
               <input className="su-input" name="phone" value={form.phone} onChange={handleChange} />

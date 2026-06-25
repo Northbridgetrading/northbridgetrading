@@ -9,7 +9,7 @@ export const COINS = [
 ];
 
 export const TIME_FILTERS = ["1D", "1W", "1M", "3M", "1Y", "ALL"];
-export const STARTING_BALANCE = 10000;
+export const STARTING_BALANCE = 0;
 
 export const MOCK_NEWS = [
   { source: "Reuters",   time: "2m ago",  title: "Bitcoin surges past $62K as ETF inflows hit record highs this week" },

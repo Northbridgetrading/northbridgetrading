@@ -36,4 +36,4 @@ function Chart({ data = [] }) {
   return <div ref={chartContainerRef} style={{ width: "100%", height: "300px" }} />;
 }
 
-export default Chart;
+export default Chart;  
