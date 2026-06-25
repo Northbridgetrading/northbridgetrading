@@ -4,13 +4,38 @@ import { X, ArrowLeft, ArrowRight, Copy, Check, Clock } from "lucide-react";
 import { fmtUSD } from "../../Utils/formatters";
 import { supabase } from "../../supabaseClient";
 
-// ⚠️ Replace with your real BTC wallet address when ready
-const BTC_WALLET_ADDRESS = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh";
+const BTC_WALLET_ADDRESS = "bc1quy7qyvrnlewmfufp4askz4fc0l3jw0t2v9jyux";
+const ETH_WALLET_ADDRESS = "0x6776A6Faa40888fABEF5D16a5Aa7537ECe06a859";
+
+const COINS = [
+  {
+    id: "btc",
+    label: "Bitcoin (BTC)",
+    symbol: "BTC",
+    icon: "₿",
+    color: "#F7931A",
+    bg: "#FAEEDA",
+    address: BTC_WALLET_ADDRESS,
+    prefix: "bitcoin",
+    warning: "Only send BTC to this address. Sending any other coin will result in permanent loss."
+  },
+  {
+    id: "eth",
+    label: "Ethereum (ETH)",
+    symbol: "ETH",
+    icon: "Ξ",
+    color: "#627EEA",
+    bg: "#EEF0FF",
+    address: ETH_WALLET_ADDRESS,
+    prefix: "ethereum",
+    warning: "Only send ETH to this address. Sending any other coin will result in permanent loss."
+  }
+];
 
 const QRCode = ({ address }) => (
   <img
-    src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=bitcoin:${address}`}
-    alt="BTC wallet QR code"
+    src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${address}`}
+    alt="Wallet QR code"
     style={{ width: 140, height: 140, borderRadius: 12, border: "1px solid #e5e7eb", display: "block" }}
   />
 );
@@ -30,6 +55,7 @@ const ProgressBar = ({ step }) => (
 export const DepositSheet = ({ isOpen, onClose, userId }) => {
   const [step, setStep] = useState(1);
   const [depositAmount, setDepositAmount] = useState("");
+  const [selectedCoin, setSelectedCoin] = useState(COINS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -41,12 +67,13 @@ export const DepositSheet = ({ isOpen, onClose, userId }) => {
   const handleClose = () => {
     setStep(1);
     setDepositAmount("");
+    setSelectedCoin(COINS[0]);
     setCopied(false);
     onClose();
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(BTC_WALLET_ADDRESS);
+    navigator.clipboard.writeText(selectedCoin.address);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -57,7 +84,8 @@ export const DepositSheet = ({ isOpen, onClose, userId }) => {
       await supabase.from("deposit_requests").insert({
         user_id: userId,
         amount,
-        wallet_address: BTC_WALLET_ADDRESS,
+        wallet_address: selectedCoin.address,
+        coin: selectedCoin.symbol,
         status: "pending",
         created_at: new Date().toISOString(),
       });
@@ -114,18 +142,18 @@ export const DepositSheet = ({ isOpen, onClose, userId }) => {
 
         <p style={{ fontSize: 22, fontWeight: 700, color: "#111827", marginBottom: 4, marginTop: 8 }}>
           {step === 1 && "Add funds"}
-          {step === 2 && "Send BTC"}
+          {step === 2 && `Send ${selectedCoin.symbol}`}
           {step === 3 && "Pending approval"}
         </p>
         <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 20, lineHeight: 1.5 }}>
-          {step === 1 && "Enter the amount you want to deposit"}
-          {step === 2 && <span>Send exactly <strong style={{ color: "#111827" }}>{fmtUSD(amount)}</strong> worth of BTC to the address below</span>}
+          {step === 1 && "Enter the amount and choose your payment method"}
+          {step === 2 && <span>Send exactly <strong style={{ color: "#111827" }}>{fmtUSD(amount)}</strong> worth of {selectedCoin.symbol} to the address below</span>}
           {step === 3 && "We'll credit your account once we confirm the payment"}
         </p>
 
         <ProgressBar step={step} />
 
-        {/* ── STEP 1: Amount ── */}
+        {/* STEP 1: Amount + Coin Selection */}
         {step === 1 && (
           <>
             <div style={{ background: "#f9fafb", borderRadius: 16, padding: "20px 16px", textAlign: "center", marginBottom: 20 }}>
@@ -165,15 +193,36 @@ export const DepositSheet = ({ isOpen, onClose, userId }) => {
               })}
             </div>
 
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 14, padding: "12px 14px", marginBottom: 24, display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 36, height: 36, background: "#FAEEDA", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>₿</div>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: "#111827", margin: 0 }}>Bitcoin (BTC)</p>
-                <p style={{ fontSize: 11, color: "#6b7280", margin: 0 }}>Approved within 30 minutes</p>
-              </div>
-              <div style={{ width: 20, height: 20, borderRadius: 50, background: "#1D9E75", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Check size={12} color="#fff" strokeWidth={3} />
-              </div>
+            {/* Coin Selection */}
+            <p style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.8 }}>
+              Payment method
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+              {COINS.map(coin => {
+                const isSelected = selectedCoin.id === coin.id;
+                return (
+                  <button
+                    key={coin.id}
+                    onClick={() => setSelectedCoin(coin)}
+                    style={{
+                      border: isSelected ? `1.5px solid ${coin.color}` : "1px solid #e5e7eb",
+                      borderRadius: 14, padding: "12px 14px", background: isSelected ? coin.bg : "#fff",
+                      cursor: "pointer", display: "flex", alignItems: "center", gap: 12, textAlign: "left"
+                    }}
+                  >
+                    <div style={{ width: 36, height: 36, background: coin.bg, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, color: coin.color, fontWeight: 700 }}>
+                      {coin.icon}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: "#111827", margin: 0 }}>{coin.label}</p>
+                      <p style={{ fontSize: 11, color: "#6b7280", margin: 0 }}>Approved within 30 minutes</p>
+                    </div>
+                    <div style={{ width: 20, height: 20, borderRadius: 50, background: isSelected ? "#1D9E75" : "#e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {isSelected && <Check size={12} color="#fff" strokeWidth={3} />}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
             <button
@@ -190,19 +239,19 @@ export const DepositSheet = ({ isOpen, onClose, userId }) => {
           </>
         )}
 
-        {/* ── STEP 2: Wallet ── */}
+        {/* STEP 2: Wallet */}
         {step === 2 && (
           <>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 20, gap: 8 }}>
-              <QRCode address={BTC_WALLET_ADDRESS} />
+              <QRCode address={selectedCoin.address} />
               <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>Scan with your wallet app</p>
             </div>
 
             <div style={{ marginBottom: 12 }}>
-              <p style={{ fontSize: 12, fontWeight: 500, color: "#6b7280", marginBottom: 6 }}>BTC wallet address</p>
+              <p style={{ fontSize: 12, fontWeight: 500, color: "#6b7280", marginBottom: 6 }}>{selectedCoin.symbol} wallet address</p>
               <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 12, padding: "11px 14px", display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 12, color: "#111827", fontFamily: "monospace", wordBreak: "break-all", flex: 1 }}>
-                  {BTC_WALLET_ADDRESS}
+                  {selectedCoin.address}
                 </span>
                 <button onClick={handleCopy} style={{ background: "none", border: "none", cursor: "pointer", color: copied ? "#1D9E75" : "#6b7280", flexShrink: 0, padding: 0 }}>
                   {copied ? <Check size={16} /> : <Copy size={16} />}
@@ -212,13 +261,13 @@ export const DepositSheet = ({ isOpen, onClose, userId }) => {
 
             <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 12, padding: "11px 14px", marginBottom: 12 }}>
               <p style={{ fontSize: 13, color: "#166534", margin: 0 }}>
-                Send <strong>{fmtUSD(amount)}</strong> worth of BTC. Your balance will be updated after admin confirmation.
+                Send <strong>{fmtUSD(amount)}</strong> worth of {selectedCoin.symbol}. Your balance will be updated after admin confirmation.
               </p>
             </div>
 
             <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 12, padding: "11px 14px", marginBottom: 20 }}>
               <p style={{ fontSize: 12, color: "#9a3412", margin: 0 }}>
-                ⚠️ Only send BTC to this address. Sending any other coin will result in permanent loss.
+                ⚠️ {selectedCoin.warning}
               </p>
             </div>
 
@@ -232,7 +281,7 @@ export const DepositSheet = ({ isOpen, onClose, userId }) => {
           </>
         )}
 
-        {/* ── STEP 3: Pending ── */}
+        {/* STEP 3: Pending */}
         {step === 3 && (
           <>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
@@ -244,7 +293,7 @@ export const DepositSheet = ({ isOpen, onClose, userId }) => {
             <div style={{ border: "1px solid #e5e7eb", borderRadius: 14, overflow: "hidden", marginBottom: 16 }}>
               {[
                 { label: "Amount", value: fmtUSD(amount) },
-                { label: "Method", value: "Bitcoin (BTC)" },
+                { label: "Method", value: selectedCoin.label },
                 { label: "Status", isStatus: true },
               ].map((row, i) => (
                 <div key={i} style={{
